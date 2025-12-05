@@ -1,0 +1,39 @@
+# Agent 映射配置
+# 定义 Agent 的短名称、完整名称、配置键之间的映射关系
+
+agents:
+  # 网络诊断 Agent
+  network:
+    config_key: "network_diag"        # agent_config.yaml 中的键
+    full_name: "network_agent"        # 在 state 和路由中使用的完整名称
+    short_names:                      # 用户可以使用的短名称（用于 @agent 语法）
+      - "network"
+      - "net"
+      - "网络"
+    description: "网络诊断专家"
+    tools_prefix: "network"           # tools_config.yaml 中的工具前缀
+  
+  # 数据库查询 Agent
+  database:
+    config_key: "database"
+    full_name: "database_agent"
+    short_names:
+      - "database"
+      - "db"
+      - "数据库"
+    description: "MySQL 数据库查询专家"
+    tools_prefix: "mysql"
+  
+  # RAG Agent（暂未启用）
+  rag:
+    config_key: "rag"
+    full_name: "rag_agent"
+    short_names:
+      - "rag"
+      - "知识库"
+    description: "知识库检索专家"
+    tools_prefix: "rag"
+
+# 默认 Agent
+default_agent: "network_agent"
+

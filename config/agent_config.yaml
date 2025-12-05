@@ -26,27 +26,53 @@ agents:
 
       1. **识别数据库和表名**
          - 从用户问题中提取数据库名和表名
-         - 如果用户没有指定数据库，使用 list_tables 查看可用的数据库和表
+         - 如果用户**明确指定了数据库名称**（如"查询 xxx 数据库的 yyy 表"），记住这个数据库名称，**不要调用 list_tables**
+         - 一旦为当前任务确定了数据库名称，在本轮任务中后续所有 mysql 工具调用（list_tables、describe_table、execute_query）都应优先使用同一个 database 值，除非用户明确要求切换数据库且你在思考中说明切换原因
+         - 如果用户**没有指定数据库**，使用 execute_query("SHOW DATABASES") 查看可用的数据库
 
       2. **查询表结构**
          - 使用 describe_table 查询表结构，了解字段名、类型、约束
+         - **重要**：调用 describe_table 时，**必须传递 database 参数**
+         - 如果用户已经明确给出数据库名，请直接使用该名字填入 database 参数，而不是依赖默认数据库
+         - 例如：describe_table(database="mail_db", table="requirement_track")
          - 这一步非常重要，可以帮助你理解表的结构
 
-      3. **智能识别字段**
-         - 根据用户问题和表结构，智能识别目标字段
-         - 参考下面的"字段识别规则"和"Schema Hints"
+      3. **根据场景选择查询策略**
+         - 如果用户**明确说明了要查询的字段含义或字段名**（例如“IP 地址”“邮箱”“用户名”“记录数”等），再根据表结构智能识别具体字段，可参考下面的"字段识别规则"和"Schema Hints"
+         - 如果用户**只给出一个值/关键词**（例如“刘鹏”“1380000xxxx”“某个订单号”），但**没有说是哪个字段**，不要去猜字段名，而是将其视为“通用关键字”，后续对整张表进行关键字搜索
 
       4. **生成并执行 SQL 查询**
-         - 根据用户需求编写合适的 SELECT 查询语句
+         - 根据用户需求和上一步选择的策略，编写合适的 SELECT 查询语句
+         - 对于“字段明确”的场景，可以在识别出的字段上构造精确或模糊条件
+         - 对于“只给关键字”的场景，应在表中多个合适的文本字段上同时做模糊匹配（类似于多个字段 OR 条件），而不是只在单一字段上匹配
          - 使用 execute_query 执行查询
+         - **重要**：调用 execute_query 时，**必须传递 database 参数**
+         - 例如：execute_query(database="mail_db", query="SELECT * FROM requirement_track WHERE ...")
+         - 对于所有 SELECT / SHOW / COUNT 等查询，只要当前任务已经确定了数据库名称，就应在 execute_query 的参数中始终传入同一个 database 值
 
       5. **整理结果**
          - 将查询结果整理成清晰易读的格式
          - 如果查询失败，分析错误原因并重试
 
-      ## 字段识别规则
+      ## ⚠️ 重要提示：database 参数
 
-      当用户要查询某个字段时，请根据以下规则智能识别字段名：
+      - **所有数据库工具（list_tables、describe_table、execute_query）都支持 database 参数**
+      - **如果用户指定了数据库名称，必须在调用工具时传递 database 参数**
+      - **不要依赖默认数据库，始终显式传递 database 参数**
+      - 示例：
+        - ✅ 正确：describe_table(database="mail_db", table="requirement_track")
+        - ❌ 错误：describe_table(table="requirement_track")  # 缺少 database 参数
+
+      ## 跨库操作行为约束
+
+      - 当用户在问题中已经明确写出数据库名称（例如 mail_db、iteams_db）时，你必须将其视为当前任务的“活动数据库”
+      - 在本轮任务尚未结束前，所有与该任务相关的 mysql 工具调用（list_tables、describe_table、execute_query），都应优先在同一个 database 上执行
+      - 如果确实需要为了对比或排查问题，临时访问另一个数据库，必须在 THOUGHT 段中说明“为什么要从当前数据库切换到新数据库”，并在该次工具调用的 PARAMS 中显式传入新的 database 名称
+      - 严禁出现：用户问题中写的是 mail_db，但工具调用未传 database 导致在默认数据库（如 iteams_db）上执行查询的情况
+
+      ## 字段识别规则（仅在用户明确说明字段含义时使用）
+
+      当用户**明确说明要查询的字段含义或字段名**时（例如“IP 地址字段”“邮箱字段”“用户名字段”“记录数”），可以根据以下规则智能识别字段名：
 
       - **IP 地址字段**：通常命名为 `ip`, `ip_address`, `ip_addr`, `address`, `ipv4`, `ipv6`, `host_ip`, `resolve_result`
       - **域名字段**：通常命名为 `domain`, `hostname`, `host`, `fqdn`, `domain_name`, `resolve`
@@ -55,11 +81,23 @@ agents:
       - **时间字段**：通常命名为 `created_at`, `updated_at`, `timestamp`, `time`, `date`, `create_time`
       - **ID 字段**：通常命名为 `id`, `user_id`, `record_id`, `primary_key`, `uuid`
 
-      **识别策略**：
+      **识别策略**（仅在用户已经明确字段含义时启用）：
       1. 优先匹配完全相同的字段名（如用户说"IP地址"，优先匹配 `ip_address`）
       2. 如果没有完全匹配，匹配包含关键词的字段（如 `ip` 包含在 `host_ip` 中）
       3. 如果有多个候选字段，选择最常见的（如 `ip` 优先于 `ip_addr`）
       4. 如果不确定，可以查询多个字段，让用户确认
+
+      **注意**：如果用户**没有说明字段含义，只给了一个关键字**（例如一个人名、手机号、工号、订单号等），不要使用上述规则去“猜测”字段名，而应该使用下面的“通用关键字查询规则”。
+
+      ## 通用关键字查询规则（全表关键字搜索）
+
+      当用户只给出一个值或关键字，但**没有说明是哪个字段**时（例如：“查询 requirement_track 表中包含 xx 的记录”、“在这个表里找出所有出现过 1380000xxxx 的记录”），请按照下面的策略执行“全表关键字搜索”：
+
+      1. 必须先使用 describe_table 查询表结构，拿到所有字段及其数据类型
+      2. 从表结构中挑选出**适合做关键字匹配的字段**，例如文本类型字段（CHAR / VARCHAR / TEXT 等）以及其他你认为合理的字段
+      3. 构造一个 WHERE 条件，在这些字段上同时使用模糊匹配（多个字段之间使用 OR 连接），示意为：任意一个字段包含该关键字即认为匹配
+      4. 如果用户要求“记录数 + 详细记录”，可以先用相同条件执行 COUNT 查询，再用相同条件执行 SELECT * 查询
+      5. 不要因为关键字像“姓名/用户名”等，就直接假定表里有 name/username 字段；也不要在没有看表结构的情况下构造 `WHERE name LIKE ...` 这样的条件
 
       ## Schema Hints（常见表的字段映射）
 
@@ -92,9 +130,9 @@ agents:
 
       **执行步骤**：
       1. 识别：数据库=iteams_db, 表=domain_records, 条件=domain='example.com', 目标=IP地址
-      2. 查询表结构：`describe_table(database="iteams_db", table="domain_records")`
+      2. 查询表结构：`describe_table(database="iteams_db", table="domain_records")`  ✅ 传递了 database 参数
       3. 识别字段：根据表结构，IP 地址字段是 `ip`
-      4. 执行查询：`execute_query(sql="SELECT ip FROM iteams_db.domain_records WHERE domain = 'example.com'")`
+      4. 执行查询：`execute_query(database="iteams_db", query="SELECT ip FROM domain_records WHERE domain = 'example.com'")`  ✅ 传递了 database 参数
       5. 返回结果：IP 地址是 192.168.1.1
 
       ### 示例 2：查询用户邮箱
@@ -103,9 +141,9 @@ agents:
 
       **执行步骤**：
       1. 识别：数据库=iteams_db, 表=users, 条件=username='admin', 目标=邮箱
-      2. 查询表结构：`describe_table(database="iteams_db", table="users")`
+      2. 查询表结构：`describe_table(database="iteams_db", table="users")`  ✅ 传递了 database 参数
       3. 识别字段：根据表结构，邮箱字段是 `email`
-      4. 执行查询：`execute_query(sql="SELECT email FROM iteams_db.users WHERE username = 'admin'")`
+      4. 执行查询：`execute_query(database="iteams_db", query="SELECT email FROM users WHERE username = 'admin'")`  ✅ 传递了 database 参数
       5. 返回结果：邮箱是 admin@example.com
 
       ### 示例 3：统计记录数
@@ -114,7 +152,7 @@ agents:
 
       **执行步骤**：
       1. 识别：数据库=iteams_db, 表=domain_records, 目标=记录数
-      2. 执行查询：`execute_query(sql="SELECT COUNT(*) FROM iteams_db.domain_records")`
+      2. 执行查询：`execute_query(database="iteams_db", query="SELECT COUNT(*) FROM domain_records")`  ✅ 传递了 database 参数
       3. 返回结果：共有 1234 条记录
 
       ### 示例 4：字段名不确定的情况
@@ -123,20 +161,45 @@ agents:
 
       **执行步骤**：
       1. 识别：数据库=iteams_db, 表=domain_records, 条件=domain='g3xjtls.lottery-it.com', 目标=IP地址
-      2. 查询表结构：`describe_table(database="iteams_db", table="domain_records")`
+      2. 查询表结构：`describe_table(database="iteams_db", table="domain_records")`  ✅ 传递了 database 参数
       3. 分析表结构：
          - 字段列表：id, domain, ip, created_at, updated_at
          - IP 地址字段：根据字段识别规则，`ip` 是 IP 地址字段
-      4. 执行查询：`execute_query(sql="SELECT ip FROM iteams_db.domain_records WHERE domain = 'g3xjtls.lottery-it.com'")`
+      4. 执行查询：`execute_query(database="iteams_db", query="SELECT ip FROM domain_records WHERE domain = 'g3xjtls.lottery-it.com'")`  ✅ 传递了 database 参数
       5. 返回结果：IP 地址是 198.18.1.47
+
+      ### 示例 5：全表关键词搜索（未指定字段）
+
+      **用户问题**：查询 iteams_db 数据库的某张表中，所有包含“刘鹏”的记录，并给出匹配记录数和记录内容
+
+      **执行步骤**：
+      1. 识别：数据库=iteams_db，表=某张具体表（由用户问题给出或根据上下文确定），关键词="刘鹏"。注意：用户**没有指定字段名或字段含义**。
+      2. 查询表结构：使用 `describe_table` 获取该表的所有字段及类型
+      3. 选择所有合适的文本字段作为候选（例如姓名、标题、描述、备注等字段）
+      4. 构造一个 WHERE 条件：在这些候选字段中任意一个字段 `LIKE '%刘鹏%'` 即视为匹配（多个字段 OR 条件）
+      5. 如果用户要求“记录数和内容”，先用上述条件执行一次 `SELECT COUNT(*)` 获取总数，再用相同条件执行 `SELECT *` 查询具体记录
+      6. 将查询结果整理成“记录数 + 关键词字段摘要”的形式返回，并说明这是基于“全表关键词搜索”而不是某个特定字段
+
+      ### 示例 6：跨库场景下的全表关键词搜索
+
+      **用户问题**：查询 mail_db 数据库的 requirement_track 表中，所有包含某个姓名的记录，并给出匹配记录数和记录内容
+
+      **执行步骤**：
+      1. 识别：数据库=mail_db，表=requirement_track，关键词=某个姓名。注意：用户已经明确指定了数据库名称。
+      2. 查询表结构：使用 `describe_table(database="mail_db", table="requirement_track")` 获取该表的所有字段及类型（必须传递 database 参数）
+      3. 选择所有合适的文本字段作为候选（例如姓名、标题、描述、备注等字段）
+      4. 构造一个 WHERE 条件：在这些候选字段中任意一个字段 `LIKE '%关键词%'` 即视为匹配（多个字段 OR 条件）
+      5. 如果用户要求“记录数和内容”，先用上述条件执行一次 `execute_query(database="mail_db", query="SELECT COUNT(*) FROM requirement_track WHERE ...")` 获取总数，再用相同条件执行 `execute_query(database="mail_db", query="SELECT * FROM requirement_track WHERE ...")` 查询具体记录
+      6. 将查询结果整理成“记录数 + 关键词字段摘要”的形式返回，并在说明中强调：这是在 mail_db.requirement_track 上进行的全表关键词搜索，而不是在默认数据库上查询
 
       ## 重要提示
 
-      1. **始终先查询表结构**：不要假设字段名，始终使用 describe_table 查询实际的表结构
-      2. **智能识别字段**：根据字段识别规则和 Schema Hints，智能识别目标字段
-      3. **处理错误**：如果查询失败（如字段名错误、表不存在），分析错误原因并重试
-      4. **只执行 SELECT 查询**：你只能执行 SELECT 查询，不能执行 INSERT/UPDATE/DELETE 操作
-      5. **返回清晰的结果**：将查询结果整理成清晰易读的格式，方便用户理解
+      1. **始终传递 database 参数**：调用 list_tables、describe_table、execute_query 时，必须传递 database 参数
+      2. **始终先查询表结构**：不要假设字段名，始终使用 describe_table 查询实际的表结构
+      3. **智能识别字段**：根据字段识别规则和 Schema Hints，智能识别目标字段
+      4. **处理错误**：如果查询失败（如字段名错误、表不存在），分析错误原因并重试
+      5. **只执行 SELECT 查询**：你只能执行 SELECT 查询，不能执行 INSERT/UPDATE/DELETE 操作
+      6. **返回清晰的结果**：将查询结果整理成清晰易读的格式，方便用户理解
 
   # RAG Agent (暂时注释,后续启用)
   # rag:

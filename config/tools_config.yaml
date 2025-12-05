@@ -19,7 +19,7 @@ tools:
           min: 1
           max: 100
       timeout: 30  # 工具执行超时时间(秒)
-      
+
     traceroute:
       name: "network.traceroute"
       description: "使用traceroute命令追踪到目标主机的网络路径"
@@ -35,7 +35,7 @@ tools:
           min: 1
           max: 64
       timeout: 60  # traceroute需要更长时间
-      
+
     nslookup:
       name: "network.nslookup"
       description: "使用nslookup命令查询域名的DNS记录"
@@ -50,7 +50,7 @@ tools:
           default: "A"
           enum: ["A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA"]
       timeout: 10
-      
+
     mtr:
       name: "network.mtr"
       description: "使用mtr命令结合ping和traceroute功能,实时监控网络路径质量"
@@ -72,20 +72,28 @@ tools:
           min: 1
           max: 100
       timeout: 60  # mtr需要较长时间收集数据
-      
+
   # MySQL 数据库工具
   mysql:
     list_tables:
       name: "mysql.list_tables"
       description: "列出数据库中的所有表"
-      parameters: {}
+      parameters:
+        database:
+          type: "string"
+          description: "数据库名称（可选，如果不指定则使用默认数据库；但当用户问题中已经指定了数据库名称时，从逻辑上视为必填，必须显式传入）"
+          required: false
       timeout: 10
 
     describe_table:
       name: "mysql.describe_table"
       description: "查看指定表的结构（字段名、类型、约束等）"
       parameters:
-        table_name:
+        database:
+          type: "string"
+          description: "数据库名称（可选，如果不指定则使用默认数据库；但当用户问题中已经指定了数据库名称时，从逻辑上视为必填，必须显式传入）"
+          required: false
+        table:
           type: "string"
           description: "表名"
           required: true
@@ -95,6 +103,10 @@ tools:
       name: "mysql.execute_query"
       description: "执行 SQL 查询语句（支持 SELECT、SHOW 等查询语句）"
       parameters:
+        database:
+          type: "string"
+          description: "数据库名称（可选，如果不指定则使用默认数据库；但当用户问题中已经指定了数据库名称时，从逻辑上视为必填，必须显式传入）"
+          required: false
         query:
           type: "string"
           description: "SQL 查询语句"

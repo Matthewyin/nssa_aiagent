@@ -328,7 +328,10 @@ def _format_node_output(node_name: str, state_update: Dict[str, Any]) -> str:
                 action = last_record.get("action", {})
 
                 if thought:
-                    output = f"\n🤔 **思考中...**\n\n{thought}\n\n"
+                    # 使用折叠标签包裹思考过程，默认打开
+                    output = "\n<details open>\n"
+                    output += "<summary>🤔 思考中...</summary>\n\n"
+                    output += f"{thought}\n\n"
 
                     # 如果有行动决策，也显示出来
                     action_type = action.get("type", "")
@@ -341,6 +344,8 @@ def _format_node_output(node_name: str, state_update: Dict[str, Any]) -> str:
                         output += "\n"
                     elif action_type == "FINISH":
                         output += "✅ **准备完成任务**\n\n"
+
+                    output += "</details>\n\n"
 
                     return output
             return ""

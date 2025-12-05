@@ -58,55 +58,88 @@ def _extract_agent_output(execution_history: List[Dict[str, Any]]) -> Optional[s
     return None
 
 
+def _build_agent_routing_map() -> Dict[str, str]:
+    """
+    从配置文件构建 Agent 路由映射
+
+    Returns:
+        Agent 名称到节点名称的映射字典
+        例如：{"network_agent": "network_agent", "database_agent": "database_agent"}
+    """
+    from utils import load_agent_mapping_config
+
+    mapping_config = load_agent_mapping_config()
+    agents = mapping_config.get("agents", {})
+
+    # 构建路由映射
+    routing_map = {}
+
+    for agent_info in agents.values():
+        full_name = agent_info.get("full_name")
+        # 节点名称 = Agent 完整名称
+        routing_map[full_name] = full_name
+
+    # 添加特殊路由
+    routing_map["skip"] = "final_answer"  # 跳过 Agent，直接返回
+
+    return routing_map
+
+
 def create_graph() -> StateGraph:
     """
     创建LangGraph工作流图
-    
+
     Returns:
         StateGraph实例
     """
     # 创建图
     workflow = StateGraph(GraphState)
-    
+
     # 添加节点
     workflow.add_node("user_input", user_input_node)
     workflow.add_node("router", router_node)
     workflow.add_node("network_agent", network_agent_node)
+    workflow.add_node("database_agent", database_agent_node)
     workflow.add_node("final_answer", final_answer_node)
-    
+
     # 设置入口点
     workflow.set_entry_point("user_input")
-    
+
     # 添加边
     # user_input -> router
     workflow.add_edge("user_input", "router")
-    
-    # router -> network_agent (根据target_agent条件路由)
+
+    # router -> agent (根据target_agent条件路由)
     def route_to_agent(state: GraphState) -> str:
         """根据target_agent路由到对应节点"""
-        target = state.get("target_agent", "network_agent")
+        from utils import load_agent_mapping_config
+
+        mapping_config = load_agent_mapping_config()
+        default_agent = mapping_config.get("default_agent", "network_agent")
+
+        target = state.get("target_agent", default_agent)
         logger.info(f"路由到: {target}")
         return target
+
+    # 从配置文件构建路由映射
+    routing_map = _build_agent_routing_map()
 
     workflow.add_conditional_edges(
         "router",
         route_to_agent,
-        {
-            "network_agent": "network_agent",
-            "skip": "final_answer",  # 跳过 Agent,直接返回
-            # 未来可以添加更多Agent
-            # "rag_agent": "rag_agent",
-        }
+        routing_map
     )
-    
-    # network_agent -> final_answer
+
+    # 所有 Agent -> final_answer
     workflow.add_edge("network_agent", "final_answer")
-    
+    workflow.add_edge("database_agent", "final_answer")
+
     # final_answer -> END
     workflow.add_edge("final_answer", END)
-    
+
     logger.info("LangGraph工作流图创建完成")
-    
+    logger.info(f"Agent 路由映射: {routing_map}")
+
     return workflow
 
 

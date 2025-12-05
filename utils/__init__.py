@@ -10,6 +10,7 @@ from .config_loader import (
     load_langchain_config,
     load_langgraph_config,
     load_router_prompt_config,
+    load_agent_mapping_config,
 )
 from .config_manager import get_config_manager, ConfigManager
 from .config_watcher import start_config_watcher, stop_config_watcher
@@ -26,6 +27,7 @@ __all__ = [
     "load_langchain_config",
     "load_langgraph_config",
     "load_router_prompt_config",
+    "load_agent_mapping_config",
     "get_config_manager",
     "ConfigManager",
     "start_config_watcher",

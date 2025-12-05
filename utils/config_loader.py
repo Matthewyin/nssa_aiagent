@@ -12,21 +12,41 @@ from string import Template
 
 
 class Settings(BaseSettings):
-    """环境变量配置"""
-    # Ollama 配置
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "deepseek-r1:8b"
-    ollama_embedding_model: str = "nomic-embed-text"
+    """
+    环境变量配置
 
+    注意：此类只包含基础设施配置（服务地址、端口、数据库连接等）
+    LLM、Agent 等业务逻辑配置请在 config/*.yaml 文件中配置
+    """
+
+    # ============================================
+    # 外部服务地址
+    # ============================================
+
+    # Ollama 服务地址
+    ollama_base_url: str = "http://localhost:11434"
+
+    # OpenWebUI 地址
+    openwebui_url: str = "http://localhost:3000"
+
+    # ============================================
     # Graph Service 配置
+    # ============================================
+
     graph_service_host: str = "0.0.0.0"
     graph_service_port: int = 30021
 
+    # ============================================
     # 日志配置
+    # ============================================
+
     log_level: str = "INFO"
     log_file: str = "data/logs/app.log"
 
+    # ============================================
     # ChromaDB 配置
+    # ============================================
+
     chroma_persist_dir: str = "data/vector_db"
     chroma_collection_name: str = "network_cases"
 
@@ -105,6 +125,11 @@ def load_langgraph_config() -> Dict[str, Any]:
 def load_router_prompt_config() -> Dict[str, Any]:
     """加载Router Prompt配置"""
     return load_yaml_config(get_config_dir() / "router_prompt.yaml")
+
+
+def load_agent_mapping_config() -> Dict[str, Any]:
+    """加载Agent映射配置"""
+    return load_yaml_config(get_config_dir() / "agent_mapping.yaml")
 
 
 # 全局配置实例

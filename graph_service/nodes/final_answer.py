@@ -53,15 +53,27 @@ def _generate_llm_analysis(user_query: str, execution_history: list, agent_plan:
 
         # 构建多 Agent 信息
         agent_info = ""
+        agent_type_desc = "分析专家"  # 默认描述
+
         if agent_plan and len(agent_plan) > 1:
             agent_info = "\n多 Agent 协作：\n"
             for i, plan in enumerate(agent_plan, 1):
                 agent_name = plan.get("agent", "")
                 task = plan.get("task", "")
                 agent_info += f"{i}. {agent_name}: {task}\n"
+            agent_type_desc = "多 Agent 协作分析专家"
+        elif agent_plan and len(agent_plan) == 1:
+            # 单 Agent 场景，根据 Agent 类型确定描述
+            agent_name = agent_plan[0].get("agent", "")
+            if "network" in agent_name.lower():
+                agent_type_desc = "网络诊断分析专家"
+            elif "database" in agent_name.lower():
+                agent_type_desc = "数据库查询分析专家"
+            elif "rag" in agent_name.lower():
+                agent_type_desc = "知识库检索分析专家"
 
         # 构建 Prompt
-        prompt = f"""你是一个专业的网络诊断分析专家。请根据以下信息，生成一份综合分析报告。
+        prompt = f"""你是一个专业的{agent_type_desc}。请根据以下信息，生成一份综合分析报告。
 
 用户问题：
 {user_query}
@@ -287,15 +299,24 @@ def final_answer_node(state: GraphState) -> GraphState:
             tool_count = len(tool_calls)
 
             if tool_count > 0:
-                # 添加标题
-                if tool_count == 1:
-                    final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    final_answer += "📊 网络诊断结果\n"
-                    final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                # 根据 target_agent 确定结果标题
+                target_agent = (state.get("target_agent") or "").lower()
+                if "database" in target_agent:
+                    base_title = "📊 数据库查询结果"
+                elif "rag" in target_agent:
+                    base_title = "📊 知识库检索结果"
+                elif "network" in target_agent:
+                    base_title = "📊 网络诊断结果"
                 else:
-                    final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    final_answer += f"📊 网络诊断结果（共执行 {tool_count} 个工具）\n"
-                    final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    base_title = "📊 任务执行结果"
+
+                # 添加标题
+                final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                if tool_count == 1:
+                    final_answer += f"{base_title}\n"
+                else:
+                    final_answer += f"{base_title}（共执行 {tool_count} 个工具）\n"
+                final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 
                 # 格式化每个工具的结果
                 for i, record in enumerate(tool_calls, 1):
@@ -331,7 +352,7 @@ def final_answer_node(state: GraphState) -> GraphState:
                 # 添加分隔线
                 final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
 
-                # 添加执行过程详情（完整展示）
+                # 添加执行过程详情（完整展示，默认打开）
                 final_answer += "<details open>\n"
                 final_answer += f"<summary>📋 执行过程详情（共 {len(execution_history)} 步）</summary>\n\n"
                 for i, record in enumerate(execution_history, 1):
@@ -411,16 +432,24 @@ def final_answer_node(state: GraphState) -> GraphState:
             all_results = diag_result.get("all_results", [])
 
             if all_results:
-                # 添加标题
+                # 添加标题（根据 target_agent 区分）
                 tool_count = len(all_results)
-                if tool_count == 1:
-                    final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    final_answer += "📊 网络诊断结果\n"
-                    final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                target_agent = (state.get("target_agent") or "").lower()
+                if "database" in target_agent:
+                    base_title = "📊 数据库查询结果"
+                elif "rag" in target_agent:
+                    base_title = "📊 知识库检索结果"
+                elif "network" in target_agent:
+                    base_title = "📊 网络诊断结果"
                 else:
-                    final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    final_answer += f"📊 网络诊断结果（共执行 {tool_count} 个工具）\n"
-                    final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    base_title = "📊 任务执行结果"
+
+                final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                if tool_count == 1:
+                    final_answer += f"{base_title}\n"
+                else:
+                    final_answer += f"{base_title}（共执行 {tool_count} 个工具）\n"
+                final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 
                 # 格式化每个工具的结果
                 for i, result in enumerate(all_results, 1):

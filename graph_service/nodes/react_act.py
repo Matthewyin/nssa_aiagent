@@ -7,6 +7,7 @@ from loguru import logger
 from ..state import GraphState
 from mcp_manager import McpClientManager
 import json
+import re
 
 
 # 全局 MCP Manager 实例
@@ -24,17 +25,16 @@ async def get_mcp_manager():
 
 
 async def react_act_node(state: GraphState) -> GraphState:
-    """
-    ReAct 行动节点
-    
+    """ReAct 行动节点
+
     Args:
         state: 当前状态
-        
+
     Returns:
         更新后的状态
     """
     state["current_node"] = "react_act"
-    
+
     try:
         # 获取下一步行动
         next_action = state.get("next_action")
@@ -44,69 +44,103 @@ async def react_act_node(state: GraphState) -> GraphState:
             state["errors"].append(error_msg)
             state["last_observation"] = f"错误: {error_msg}"
             return state
-        
+
         action_type = next_action.get("action_type")
-        
+
         # 如果是 FINISH，不执行任何操作
         if action_type == "FINISH":
             logger.info("行动类型是 FINISH，跳过执行")
             state["last_observation"] = "任务已完成"
             return state
-        
+
         # 如果是 TOOL，执行工具调用
         if action_type == "TOOL":
             tool_name = next_action.get("tool_name")
             params = next_action.get("params", {})
-            
+
             if not tool_name:
                 error_msg = "工具名称为空"
                 logger.error(error_msg)
                 state["errors"].append(error_msg)
                 state["last_observation"] = f"错误: {error_msg}"
                 return state
-            
+
+            # 对 mysql 工具自动补全 database 参数（仅在显式缺失且用户问题中有明确库名时）
+            if tool_name.startswith("mysql."):
+                try:
+                    db_in_params = params.get("database") if isinstance(params, dict) else None
+                    need_fill = (db_in_params is None) or (
+                        isinstance(db_in_params, str) and not db_in_params.strip()
+                    )
+                    if need_fill:
+                        user_query = state.get("user_query", "")
+                        db_name = None
+                        if isinstance(user_query, str):
+                            matches = re.findall(r"\b([A-Za-z0-9_]+_db)\b", user_query)
+                            if matches:
+                                unique_matches = []
+                                for m in matches:
+                                    if m not in unique_matches:
+                                        unique_matches.append(m)
+                                if len(unique_matches) == 1:
+                                    db_name = unique_matches[0]
+                        if db_name:
+                            if not isinstance(params, dict):
+                                params = {}
+                            params["database"] = db_name
+                            logger.info(
+                                f"自动补全 mysql 工具的 database 参数: {db_name}"
+                            )
+                except Exception as e:
+                    logger.warning(
+                        f"自动补全 mysql database 参数时出现异常: {str(e)}"
+                    )
+
             logger.info(f"执行工具: {tool_name}, 参数: {params}")
-            
+
             # 获取 MCP Manager
             mcp_manager = await get_mcp_manager()
-            
+
             # 调用工具
             try:
                 result = await mcp_manager.call_tool(tool_name, params)
-                
+
                 # 解析结果
                 if isinstance(result, str):
                     try:
                         result_dict = json.loads(result)
-                        result_str = json.dumps(result_dict, ensure_ascii=False, indent=2)
+                        result_str = json.dumps(
+                            result_dict, ensure_ascii=False, indent=2
+                        )
                     except json.JSONDecodeError:
                         result_str = result
                 else:
                     result_str = json.dumps(result, ensure_ascii=False, indent=2)
-                
+
                 logger.info(f"工具执行成功: {tool_name}")
                 logger.debug(f"工具结果:\n{result_str[:500]}...")
-                
+
                 # 保存观察结果
-                state["last_observation"] = f"工具 {tool_name} 执行成功。结果:\n{result_str}"
-                
+                state["last_observation"] = (
+                    f"工具 {tool_name} 执行成功。结果:\n{result_str}"
+                )
+
             except Exception as e:
                 error_msg = f"工具调用失败: {tool_name}, 错误: {str(e)}"
                 logger.error(error_msg, exc_info=True)
                 state["errors"].append(error_msg)
                 state["last_observation"] = f"错误: {error_msg}"
-        
+
         else:
             error_msg = f"未知的行动类型: {action_type}"
             logger.error(error_msg)
             state["errors"].append(error_msg)
             state["last_observation"] = f"错误: {error_msg}"
-    
+
     except Exception as e:
         error_msg = f"ReAct Act 失败: {str(e)}"
         logger.error(error_msg, exc_info=True)
         state["errors"].append(error_msg)
         state["last_observation"] = f"错误: {error_msg}"
-    
-    return state
 
+    return state

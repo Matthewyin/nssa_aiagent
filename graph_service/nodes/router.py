@@ -215,6 +215,34 @@ def _generate_agent_plan_from_template(template: Dict[str, Any], parameters: Dic
         return None
 
 
+def _get_agent_name_mapping() -> Dict[str, str]:
+    """
+    从配置文件获取 Agent 名称映射
+
+    Returns:
+        Agent 短名称到完整名称的映射字典
+        例如：{"database": "database_agent", "network": "network_agent"}
+    """
+    from utils import load_agent_mapping_config
+
+    # 加载 Agent 映射配置
+    mapping_config = load_agent_mapping_config()
+    agents = mapping_config.get("agents", {})
+
+    # 构建映射：短名称 -> 完整名称
+    mapping = {}
+
+    for agent_info in agents.values():
+        full_name = agent_info.get("full_name")
+        short_names = agent_info.get("short_names", [])
+
+        # 为每个短名称创建映射
+        for short_name in short_names:
+            mapping[short_name.lower()] = full_name
+
+    return mapping
+
+
 def _parse_manual_routing(user_query: str) -> Optional[List[Dict[str, Any]]]:
     """
     解析手动指定的 Agent 路由（@agent 语法）
@@ -231,11 +259,8 @@ def _parse_manual_routing(user_query: str) -> Optional[List[Dict[str, Any]]]:
     Returns:
         Agent 执行计划列表，如果没有找到 @agent 标记则返回 None
     """
-    # Agent 名称映射
-    agent_mapping = {
-        "database": "database_agent",
-        "network": "network_agent",
-    }
+    # 从配置文件获取 Agent 名称映射
+    agent_mapping = _get_agent_name_mapping()
 
     # 查找所有 @agent_name 标记
     pattern = r'@(\w+)\s+([^@]+)'
@@ -269,6 +294,84 @@ def _parse_manual_routing(user_query: str) -> Optional[List[Dict[str, Any]]]:
     return agent_plan
 
 
+def _build_dynamic_system_prompt() -> str:
+    """
+    从配置文件动态构建 Router 的 system_prompt
+
+    Returns:
+        动态生成的 system_prompt
+    """
+    from utils import load_agent_mapping_config, load_agent_config, load_tools_config
+
+    # 加载配置
+    mapping_config = load_agent_mapping_config()
+    agent_config = load_agent_config()
+    tools_config = load_tools_config()
+
+    agents = mapping_config.get("agents", {})
+
+    # 构建 Agent 列表描述
+    agent_descriptions = []
+
+    for i, (agent_key, agent_info) in enumerate(agents.items(), 1):
+        full_name = agent_info.get("full_name")
+        description = agent_info.get("description", "")
+        config_key = agent_info.get("config_key")
+        tools_prefix = agent_info.get("tools_prefix")
+
+        # 获取 Agent 的详细配置
+        agent_detail = agent_config.get("agents", {}).get(config_key, {})
+
+        # 获取工具列表
+        tools = tools_config.get("tools", {}).get(tools_prefix, {})
+        tool_names = [tool.get("name", "") for tool in tools.values()]
+
+        # 构建描述
+        agent_desc = f"{i}. {full_name} - {description}\n"
+        agent_desc += f"   - 功能：{', '.join(tool_names)}\n"
+
+        # 从 agent_config 中提取适用场景和关键词（如果有）
+        # 这里简化处理，可以根据需要扩展
+        agent_desc += f"   - 适用场景：{agent_detail.get('description', description)}\n"
+
+        agent_descriptions.append(agent_desc)
+
+    # 构建完整的 system_prompt
+    system_prompt = """你是一个智能路由系统，负责分析用户的问题并决定使用哪些 Agent 来处理。
+
+可用的 Agent：
+"""
+    system_prompt += "\n".join(agent_descriptions)
+
+    system_prompt += """
+你的任务：
+1. 分析用户的问题
+2. 判断需要使用哪些 Agent
+3. 如果需要多个 Agent，确定执行顺序
+4. 为每个 Agent 提取具体的任务描述
+
+返回格式（必须是有效的 JSON）：
+{
+  "agents": [
+    {
+      "name": "agent_name",
+      "task": "具体任务描述"
+    }
+  ],
+  "reasoning": "你的分析过程"
+}
+
+注意事项：
+1. 如果问题只需要一个 Agent，agents 数组只包含一个元素
+2. 如果问题需要多个 Agent 协作，按照执行顺序排列
+3. 每个 Agent 的 task 应该清晰具体，包含必要的参数信息
+4. 如果问题中提到了具体的数据（如域名、IP、表名），要在 task 中包含
+5. 必须返回有效的 JSON 格式，不要包含其他文本
+"""
+
+    return system_prompt
+
+
 def _llm_router(user_query: str) -> Optional[List[Dict[str, Any]]]:
     """
     使用 LLM 进行路由决策
@@ -280,12 +383,14 @@ def _llm_router(user_query: str) -> Optional[List[Dict[str, Any]]]:
         Agent 执行计划列表，格式: [{"name": "agent_name", "task": "任务描述", "status": "pending"}]
     """
     try:
+        # 动态构建 system_prompt
+        system_prompt = _build_dynamic_system_prompt()
+
         # 加载配置
         router_config = load_router_prompt_config()
         llm_router_config = router_config.get("llm_router", {})
 
-        system_prompt = llm_router_config.get("system_prompt", "")
-        user_prompt_template = llm_router_config.get("user_prompt_template", "")
+        user_prompt_template = llm_router_config.get("user_prompt_template", "用户问题：{user_query}")
         llm_config = llm_router_config.get("llm_config", {})
 
         # 构建提示词
