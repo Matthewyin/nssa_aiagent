@@ -12,6 +12,7 @@ import json
 
 from .graph import compile_graph
 from .state import GraphState
+from .utils import smart_truncate, get_tool_type, extract_result_summary
 
 
 router = APIRouter()
@@ -328,19 +329,19 @@ def _format_node_output(node_name: str, state_update: Dict[str, Any]) -> str:
                 action = last_record.get("action", {})
 
                 if thought:
-                    # 使用折叠标签包裹思考过程，默认打开
+                    # 使用 Markdown 格式，默认展开
                     output = "\n<details open>\n"
                     output += "<summary>🤔 思考中...</summary>\n\n"
-                    output += f"{thought}\n\n"
+                    output += f"```\n{thought}\n```\n\n"
 
                     # 如果有行动决策，也显示出来
                     action_type = action.get("type", "")
                     if action_type == "TOOL":
                         tool_name = action.get("tool", "")
                         params = action.get("params", {})
-                        output += f"🔧 **准备执行工具**: {tool_name}\n"
+                        output += f"🔧 **准备执行工具**: `{tool_name}`\n"
                         if params:
-                            output += f"参数: {json.dumps(params, ensure_ascii=False)}\n"
+                            output += f"**参数**: `{json.dumps(params, ensure_ascii=False)}`\n"
                         output += "\n"
                     elif action_type == "FINISH":
                         output += "✅ **准备完成任务**\n\n"
@@ -356,15 +357,32 @@ def _format_node_output(node_name: str, state_update: Dict[str, Any]) -> str:
             if execution_history:
                 last_record = execution_history[-1]
                 observation = last_record.get("observation", "")
+                action = last_record.get("action", {})
 
                 if observation:
-                    # 限制观察结果的长度
-                    if len(observation) > 500:
-                        observation_display = observation[:500] + "...\n（结果过长，已截断）"
-                    else:
-                        observation_display = observation
+                    # 获取工具名称和类型
+                    tool_name = action.get("tool", "") if isinstance(action, dict) else ""
+                    tool_type = get_tool_type(tool_name) if tool_name else "default"
 
-                    return f"\n📊 **观察结果**\n\n{observation_display}\n\n"
+                    # 尝试提取结构化摘要
+                    summary = extract_result_summary(tool_name, observation) if tool_name else None
+
+                    # 使用 Markdown 格式，默认展开
+                    output = "\n<details open>\n"
+                    output += "<summary>📊 观察结果</summary>\n\n"
+
+                    # 如果有摘要，先显示摘要
+                    if summary:
+                        output += f"**摘要**: {summary}\n\n"
+
+                    # 智能截断观察结果
+                    observation_display = smart_truncate(observation, tool_type)
+
+                    # 使用代码块包裹，保持格式
+                    output += f"```\n{observation_display}\n```\n\n"
+                    output += "</details>\n\n"
+
+                    return output
             return ""
 
         # 最终答案节点

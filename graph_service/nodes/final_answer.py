@@ -6,6 +6,7 @@ from typing import Dict, Any
 import json
 from loguru import logger
 from ..state import GraphState
+from ..utils import smart_truncate, get_tool_type, extract_result_summary
 from utils import load_langgraph_config, get_config_manager
 
 
@@ -393,14 +394,21 @@ def final_answer_node(state: GraphState) -> GraphState:
                         final_answer += "│ ✅ 行动: 完成任务\n"
                         final_answer += "│\n"
 
-                    # 展示观察结果（完整内容，但限制长度避免过长）
+                    # 展示观察结果（使用智能截断，保留开头和结尾）
                     if observation:
                         final_answer += "│ 📊 观察:\n"
-                        # 如果观察结果太长（超过 500 字符），截断并提示
-                        if len(observation) > 500:
-                            observation_display = observation[:500] + "...\n│ （结果过长，已截断）"
-                        else:
-                            observation_display = observation
+
+                        # 获取工具名称和类型，使用智能截断
+                        obs_tool_name = action.get("tool", "") if isinstance(action, dict) else ""
+                        obs_tool_type = get_tool_type(obs_tool_name) if obs_tool_name else "default"
+
+                        # 尝试提取结构化摘要
+                        summary = extract_result_summary(obs_tool_name, observation) if obs_tool_name else None
+                        if summary:
+                            final_answer += f"│ 📌 摘要: {summary}\n"
+
+                        # 使用智能截断
+                        observation_display = smart_truncate(observation, obs_tool_type)
 
                         # 将观察结果按行分割，每行前面加上 "│ "
                         for line in observation_display.split('\n'):

@@ -5,6 +5,7 @@ ReAct Think Node
 from typing import Dict, Any
 from loguru import logger
 from ..state import GraphState
+from ..utils import smart_truncate, get_tool_type, extract_result_summary
 from utils import get_config_manager, load_agent_config
 import re
 import json
@@ -88,7 +89,7 @@ def build_think_prompt(state: GraphState, available_tools: list) -> str:
         for tool in available_tools
     ])
 
-    # 执行历史
+    # 执行历史 - 使用智能截断，保留开头和结尾的关键信息
     history_desc = ""
     if state.get("execution_history"):
         history_desc = "\n\n执行历史:\n"
@@ -96,7 +97,26 @@ def build_think_prompt(state: GraphState, available_tools: list) -> str:
             history_desc += f"\n步骤 {i}:\n"
             history_desc += f"  思考: {record.get('thought', 'N/A')}\n"
             history_desc += f"  行动: {record.get('action', 'N/A')}\n"
-            history_desc += f"  观察: {record.get('observation', 'N/A')[:200]}...\n"
+
+            # 获取观察结果，使用智能截断
+            observation = record.get('observation', 'N/A')
+            action = record.get('action', {})
+            tool_name = action.get('tool', '') if isinstance(action, dict) else ''
+
+            # 尝试提取结构化摘要
+            summary = extract_result_summary(tool_name, observation) if tool_name else None
+
+            if summary:
+                # 如果能提取摘要，显示摘要 + 智能截断的详情
+                tool_type = get_tool_type(tool_name)
+                truncated_obs = smart_truncate(observation, tool_type)
+                history_desc += f"  摘要: {summary}\n"
+                history_desc += f"  观察: {truncated_obs}\n"
+            else:
+                # 使用智能截断
+                tool_type = get_tool_type(tool_name) if tool_name else "default"
+                truncated_obs = smart_truncate(observation, tool_type)
+                history_desc += f"  观察: {truncated_obs}\n"
 
     # 上一步观察
     last_obs = state.get("last_observation", "")
