@@ -320,13 +320,14 @@ def _format_node_output(node_name: str, state_update: Dict[str, Any]) -> str:
                 return output
             return ""
 
-        # ReAct 思考节点
+        # ReAct 思考节点 - 从 next_action 读取当前思考结果
         elif node_name == "react_think":
-            execution_history = state_update.get("execution_history", [])
-            if execution_history:
-                last_record = execution_history[-1]
-                thought = last_record.get("thought", "")
-                action = last_record.get("action", {})
+            next_action = state_update.get("next_action", {})
+            if next_action:
+                thought = next_action.get("thought", "")
+                action_type = next_action.get("action_type", "")
+                tool_name = next_action.get("tool_name", "")
+                params = next_action.get("params", {})
 
                 if thought:
                     # 使用 Markdown 格式，默认展开
@@ -335,10 +336,7 @@ def _format_node_output(node_name: str, state_update: Dict[str, Any]) -> str:
                     output += f"```\n{thought}\n```\n\n"
 
                     # 如果有行动决策，也显示出来
-                    action_type = action.get("type", "")
                     if action_type == "TOOL":
-                        tool_name = action.get("tool", "")
-                        params = action.get("params", {})
                         output += f"🔧 **准备执行工具**: `{tool_name}`\n"
                         if params:
                             output += f"**参数**: `{json.dumps(params, ensure_ascii=False)}`\n"
