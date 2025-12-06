@@ -3,16 +3,53 @@
 # base_url 可以使用环境变量 ${OLLAMA_BASE_URL}，如果环境变量不存在则使用默认值
 
 llm:
-  provider: "ollama"
-  base_url: "${OLLAMA_BASE_URL}"  # 从 .env 读取，默认: http://localhost:11434
-  # model: "gpt-oss:20b"
-  model: "deepseek-r1:8b"
+  # 当前使用的 Provider，可选：ollama / openai / gemini / deepseek
+  # provider: "ollama"
+  # provider: "gemini"
+  provider: "deepseek"
+
+  # 通用参数（所有 Provider 共用）
+  model: "deepseek-reasoner"
+  # model: "gemini-2.5-pro"
+  # model: "deepseek-r1:8b"
   temperature: 0.7
   max_tokens: 8000
   timeout: 120
 
-# Embedding 配置
+  # Provider 通用字段（由下方 providers.* 预设或这里覆盖）
+  # 注意：base_url 应该在各 provider 配置中单独设置，不要在这里设置通用值
+  # base_url: "${OLLAMA_BASE_URL}"
+
+# 各 Provider 预设配置（可选，用于提供默认 model/base_url）
+providers:
+  ollama:
+    base_url: "${OLLAMA_BASE_URL}"
+    model: "deepseek-r1:8b"
+
+  # OpenAI / ChatGPT
+  openai:
+    # 注意：API Key 请通过系统环境变量 OPENAI_API_KEY 提供
+    # base_url 可选使用 OPENAI_BASE_URL 或在此覆盖
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "${OPENAI_BASE_URL}"
+    model: "gpt-4o"
+
+  # Google Gemini
+  gemini:
+    # 注意：API Key 请通过系统环境变量 GEMINI_API_KEY 提供
+    api_key: "${GEMINI_API_KEY}"
+    model: "gemini-2.5-pro"
+    # Gemini 不需要 base_url，使用官方默认地址
+
+  # DeepSeek（OpenAI 兼容接口）
+  deepseek:
+    # 注意：API Key 请通过系统环境变量 DEEPSEEK_API_KEY 提供
+    api_key: "${DEEPSEEK_API_KEY}"
+    base_url: "${DEEPSEEK_BASE_URL}"
+    model: "deepseek-reasoner"
+
+# Embedding 配置（保持与之前兼容）
 embedding:
   provider: "ollama"
-  base_url: "${OLLAMA_BASE_URL}"  # 从 .env 读取，默认: http://localhost:11434
+  base_url: "${OLLAMA_BASE_URL}"  # 从环境变量读取，默认: http://localhost:11434
   model: "nomic-embed-text"  # Ollama 嵌入模型

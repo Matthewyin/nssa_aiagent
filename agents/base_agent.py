@@ -3,13 +3,12 @@ Agent基类
 所有Agent的基础类,提供LLM配置和工具加载功能
 """
 from typing import List, Optional, Dict, Any
-from langchain_community.llms import Ollama
 from langchain_core.tools import Tool
 from loguru import logger
 import json
 import re
 
-from utils import load_llm_config, load_agent_config, load_langchain_config
+from utils import load_llm_config, load_agent_config, load_langchain_config, get_config_manager
 
 
 class BaseAgent:
@@ -59,17 +58,14 @@ class BaseAgent:
     
     def _init_llm(self):
         """初始化LLM"""
-        llm_conf = self.llm_config.get("llm", {})
-        
-        # 使用Ollama
-        llm = Ollama(
-            base_url=llm_conf.get("base_url", "http://localhost:11434"),
-            model=llm_conf.get("model", "deepseek-r1:8b"),
-            temperature=llm_conf.get("temperature", 0.7),
-            num_predict=llm_conf.get("max_tokens", 2000),
-        )
-        
-        logger.info(f"LLM初始化完成: {llm_conf.get('model')}")
+        # 统一通过 ConfigManager 获取 LLM，避免在 BaseAgent 中硬编码 Provider / 模型等信息
+        config_manager = get_config_manager()
+
+        # 使用 agent_name 作为实例名，便于在 llm_config.yaml 中做细粒度区分
+        instance_name = self.agent_name or "agent_default"
+
+        llm = config_manager.get_llm(instance_name)
+        logger.info(f"LLM初始化完成: instance={instance_name}")
         return llm
     
     async def run(self, query: str) -> Dict[str, Any]:

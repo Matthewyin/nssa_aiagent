@@ -8,6 +8,8 @@ mcp_servers:
       - "mcp_servers.network_mcp.server"
     tools_prefix: "network"
     description: "网络诊断工具集"
+    env:
+      NETPROBE_BIN: "${NETPROBE_BIN}"
 
   # MySQL 数据库 MCP Server
   - name: mysql-mcp

@@ -19,6 +19,13 @@ tools:
           min: 1
           max: 100
       timeout: 30  # 工具执行超时时间(秒)
+      runner:
+        type: "netprobe"           # 使用 Go 探测 CLI；可切换为 python 以兼容旧实现
+        command: "${NETPROBE_BIN}" # 留空则默认 netprobe
+        subcommand: "ping"
+        args:
+          target: "--target"
+          count: "--count"
 
     traceroute:
       name: "network.traceroute"
@@ -35,6 +42,13 @@ tools:
           min: 1
           max: 64
       timeout: 60  # traceroute需要更长时间
+      runner:
+        type: "netprobe"
+        command: "${NETPROBE_BIN}"
+        subcommand: "trace"
+        args:
+          target: "--target"
+          max_hops: "--max-hops"
 
     nslookup:
       name: "network.nslookup"
@@ -50,6 +64,13 @@ tools:
           default: "A"
           enum: ["A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA"]
       timeout: 10
+      runner:
+        type: "netprobe"
+        command: "${NETPROBE_BIN}"
+        subcommand: "nslookup"
+        args:
+          target: "--target"
+          record_type: "--record-type"
 
     mtr:
       name: "network.mtr"
@@ -72,50 +93,178 @@ tools:
           min: 1
           max: 100
       timeout: 60  # mtr需要较长时间收集数据
+      runner:
+        type: "netprobe"
+        command: "${NETPROBE_BIN}"
+        subcommand: "mtr"
+        use_sudo: true           # mtr 需要 root/cap_net_raw，可按需关闭并为 mtr 设置 setcap
+        args:
+          target: "--target"
+          count: "--count"
+          report_cycles: "--report-cycles"
+
+    tcp:
+      name: "network.tcp"
+      description: "TCP 探测：建立 TCP 连接并返回握手耗时、错误原因"
+      parameters:
+        host:
+          type: "string"
+          description: "目标主机"
+          required: true
+        port:
+          type: "integer"
+          description: "目标端口"
+          required: true
+        timeout:
+          type: "integer"
+          description: "超时时间(秒)"
+          default: 10
+        retry:
+          type: "integer"
+          description: "重试次数"
+          default: 0
+      timeout: 30
+      runner:
+        type: "netprobe"
+        command: "${NETPROBE_BIN}"
+        subcommand: "tcp"
+        args:
+          host: "--host"
+          port: "--port"
+          timeout: "--timeout"
+          retry: "--retry"
+
+    tls:
+      name: "network.tls"
+      description: "TLS 探测：单向/双向握手，验证证书与握手耗时"
+      parameters:
+        host:
+          type: "string"
+          description: "目标主机"
+          required: true
+        port:
+          type: "integer"
+          description: "目标端口"
+          required: true
+        server_name:
+          type: "string"
+          description: "SNI/证书校验主机名"
+          required: false
+        timeout:
+          type: "integer"
+          description: "超时时间(秒)"
+          default: 10
+        insecure:
+          type: "boolean"
+          description: "跳过证书校验"
+          default: false
+        ca_cert:
+          type: "string"
+          description: "根证书路径"
+          required: false
+        client_cert:
+          type: "string"
+          description: "客户端证书路径(双向认证)"
+          required: false
+        client_key:
+          type: "string"
+          description: "客户端私钥路径(双向认证)"
+          required: false
+      timeout: 30
+      runner:
+        type: "netprobe"
+        command: "${NETPROBE_BIN}"
+        subcommand: "tls"
+        args:
+          host: "--host"
+          port: "--port"
+          server_name: "--server-name"
+          timeout: "--timeout"
+          insecure: "--insecure"
+          ca_cert: "--ca-cert"
+          client_cert: "--client-cert"
+          client_key: "--client-key"
+
+    http:
+      name: "network.http"
+      description: "HTTP 探测：发起 HTTP/HTTPS 请求并验证状态码与响应"
+      parameters:
+        url:
+          type: "string"
+          description: "目标 URL"
+          required: true
+        method:
+          type: "string"
+          description: "HTTP 方法"
+          default: "GET"
+        headers:
+          type: "object"
+          description: "请求头键值对"
+          required: false
+        body:
+          type: "string"
+          description: "请求体"
+          required: false
+        timeout:
+          type: "integer"
+          description: "超时时间(秒)"
+          default: 15
+        expect_status:
+          type: "integer"
+          description: "预期状态码(可选)"
+          required: false
+        expect_contains:
+          type: "string"
+          description: "响应体期望包含的字符串(可选)"
+          required: false
+      timeout: 60
+      runner:
+        type: "netprobe"
+        command: "${NETPROBE_BIN}"
+        subcommand: "http"
+        args:
+          url: "--url"
+          method: "--method"
+          timeout: "--timeout"
+          expect_status: "--expect-status"
+          expect_contains: "--expect-contains"
+          body: "--body"
+          headers: "--headers"
 
   # MySQL 数据库工具
+  # 注意：这些工具定义仅用于文档和提示，实际工具由 mcp-server-mysql 提供
+  # mcp-server-mysql 提供的工具：execute_query, create_table, insert_data, fetch_data, list_tables, describe_table
+  # ⚠️ 重要：这些工具都不支持 database 参数！需要在 SQL 中使用 database.table 格式来访问不同数据库
   mysql:
     list_tables:
       name: "mysql.list_tables"
-      description: "列出数据库中的所有表"
-      parameters:
-        database:
-          type: "string"
-          description: "数据库名称（可选，如果不指定则使用默认数据库；但当用户问题中已经指定了数据库名称时，从逻辑上视为必填，必须显式传入）"
-          required: false
+      description: "列出默认数据库中的所有表。注意：此工具只能列出默认数据库的表，不支持 database 参数。如需查询其他数据库的表，请使用 execute_query 执行 SHOW TABLES FROM database_name"
+      parameters: {}
       timeout: 10
 
     describe_table:
       name: "mysql.describe_table"
-      description: "查看指定表的结构（字段名、类型、约束等）"
+      description: "查看指定表的结构。注意：此工具不支持 database 参数，只能查询默认数据库中的表。如需查询其他数据库的表结构，请使用 execute_query 执行 DESCRIBE database_name.table_name"
       parameters:
-        database:
-          type: "string"
-          description: "数据库名称（可选，如果不指定则使用默认数据库；但当用户问题中已经指定了数据库名称时，从逻辑上视为必填，必须显式传入）"
-          required: false
         table:
           type: "string"
-          description: "表名"
+          description: "表名（如需查询其他数据库的表，请使用 execute_query）"
           required: true
       timeout: 10
 
     execute_query:
       name: "mysql.execute_query"
-      description: "执行 SQL 查询语句（支持 SELECT、SHOW 等查询语句）"
+      description: "执行 SQL 查询语句。注意：此工具不支持 database 参数。如需查询其他数据库，必须在 SQL 中使用 database.table 格式，例如 SELECT * FROM mail_db.requirements_track"
       parameters:
-        database:
-          type: "string"
-          description: "数据库名称（可选，如果不指定则使用默认数据库；但当用户问题中已经指定了数据库名称时，从逻辑上视为必填，必须显式传入）"
-          required: false
         query:
           type: "string"
-          description: "SQL 查询语句"
+          description: "SQL 查询语句。跨数据库查询时使用 database.table 格式，如 SELECT * FROM mail_db.requirements_track"
           required: true
       timeout: 30
 
     fetch_data:
       name: "mysql.fetch_data"
-      description: "从指定表获取数据"
+      description: "从指定表获取数据（仅限默认数据库）。如需查询其他数据库，请使用 execute_query"
       parameters:
         table_name:
           type: "string"

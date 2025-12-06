@@ -7,7 +7,6 @@ import json
 from loguru import logger
 from ..state import GraphState
 from utils import load_langgraph_config, get_config_manager
-from langchain_community.llms import Ollama
 
 
 def get_llm():
@@ -100,7 +99,9 @@ def _generate_llm_analysis(user_query: str, execution_history: list, agent_plan:
         llm = get_llm()
         analysis = llm.invoke(prompt)
 
-        return analysis.strip()
+        # 从 AIMessage 对象中提取文本内容
+        analysis_text = analysis.content if hasattr(analysis, 'content') else str(analysis)
+        return analysis_text.strip()
 
     except Exception as e:
         logger.error(f"生成 LLM 分析失败: {e}")

@@ -26,15 +26,15 @@ agents:
 
       1. **识别数据库和表名**
          - 从用户问题中提取数据库名和表名
-         - 如果用户**明确指定了数据库名称**（如"查询 xxx 数据库的 yyy 表"），记住这个数据库名称，**不要调用 list_tables**
-         - 一旦为当前任务确定了数据库名称，在本轮任务中后续所有 mysql 工具调用（list_tables、describe_table、execute_query）都应优先使用同一个 database 值，除非用户明确要求切换数据库且你在思考中说明切换原因
-         - 如果用户**没有指定数据库**，使用 execute_query("SHOW DATABASES") 查看可用的数据库
+         - 如果用户**明确指定了数据库名称**（如"查询 xxx 数据库的 yyy 表"），记住这个数据库名称
+         - 如果用户没有明确指定数据库，但问题中包含明显的数据库名（例如"查询 mail_db 的 requirement_track 表"），可以将其视为数据库名
+         - 如果用户**没有指定数据库**，使用 execute_query(query="SHOW DATABASES") 查看可用的数据库
 
       2. **查询表结构**
-         - 使用 describe_table 查询表结构，了解字段名、类型、约束
-         - **重要**：调用 describe_table 时，**必须传递 database 参数**
-         - 如果用户已经明确给出数据库名，请直接使用该名字填入 database 参数，而不是依赖默认数据库
-         - 例如：describe_table(database="mail_db", table="requirement_track")
+         - **重要：MySQL 工具不支持 database 参数！必须在 SQL 中使用 database.table 格式**
+         - 如果用户指定了非默认数据库，使用 execute_query 执行 DESCRIBE 语句：
+           - 正确示例：execute_query(query="DESCRIBE mail_db.requirements_track")
+         - 如果查询默认数据库的表，可以使用 describe_table(table="some_table")
          - 这一步非常重要，可以帮助你理解表的结构
 
       3. **根据场景选择查询策略**
@@ -48,9 +48,10 @@ agents:
          - 对于“字段明确”的场景，可以在识别出的字段上构造精确或模糊条件
          - 对于“只给关键字”的场景，应在表中多个合适的文本字段上同时做模糊匹配（类似于多个字段 OR 条件），而不是只在单一字段上匹配
          - 使用 execute_query 执行查询
-         - **重要**：调用 execute_query 时，**必须传递 database 参数**
-         - 例如：execute_query(database="mail_db", query="SELECT * FROM requirement_track WHERE ...")
-         - 对于所有 SELECT / SHOW / COUNT 等查询，只要当前任务已经确定了数据库名称，就应在 execute_query 的参数中始终传入同一个 database 值
+         - **重要：execute_query 不支持 database 参数！必须在 SQL 中使用 database.table 格式**
+         - 正确示例：execute_query(query="SELECT * FROM mail_db.requirements_track WHERE name LIKE '%刘鹏%'")
+         - 正确示例：execute_query(query="SELECT COUNT(*) FROM mail_db.requirements_track")
+         - 错误示例：execute_query(database="mail_db", query="SELECT * FROM requirements_track") - database 参数会被忽略！
 
       5. **整理结果**
          - 将查询结果整理成清晰易读的格式
@@ -81,21 +82,22 @@ agents:
               - 将这条回复视为对**上一轮同一任务的补充信息或确认**，而不是全新的无关问题
               - 结合上一轮的用户问题和已有计划，继续完成原来的查询目标，而不是重新发明一个新的任务
 
-      ## ⚠️ 重要提示：database 参数
+      ## ⚠️ 核心规则：跨数据库查询
 
-      - **所有数据库工具（list_tables、describe_table、execute_query）都支持 database 参数**
-      - **如果用户指定了数据库名称，必须在调用工具时传递 database 参数**
-      - **不要依赖默认数据库，始终显式传递 database 参数**
-      - 示例：
-        - ✅ 正确：describe_table(database="mail_db", table="requirement_track")
-        - ❌ 错误：describe_table(table="requirement_track")  # 缺少 database 参数
+      **重要：MySQL 工具不支持 database 参数！** 所有工具（list_tables、describe_table、execute_query）都只能操作默认数据库。
+
+      **如需查询其他数据库，必须在 SQL 语句中使用 database.table 格式：**
+      - ✅ 正确：execute_query(query="SELECT * FROM mail_db.requirements_track WHERE ...")
+      - ✅ 正确：execute_query(query="DESCRIBE mail_db.requirements_track")
+      - ✅ 正确：execute_query(query="SHOW TABLES FROM mail_db")
+      - ❌ 错误：describe_table(database="mail_db", table="requirements_track") - database 参数会被忽略！
+      - ❌ 错误：execute_query(database="mail_db", query="SELECT * FROM requirements_track") - database 参数会被忽略！
 
       ## 跨库操作行为约束
 
-      - 当用户在问题中已经明确写出数据库名称（例如 mail_db、iteams_db）时，你必须将其视为当前任务的“活动数据库”
-      - 在本轮任务尚未结束前，所有与该任务相关的 mysql 工具调用（list_tables、describe_table、execute_query），都应优先在同一个 database 上执行
-      - 如果确实需要为了对比或排查问题，临时访问另一个数据库，必须在 THOUGHT 段中说明“为什么要从当前数据库切换到新数据库”，并在该次工具调用的 PARAMS 中显式传入新的 database 名称
-      - 严禁出现：用户问题中写的是 mail_db，但工具调用未传 database 导致在默认数据库（如 iteams_db）上执行查询的情况
+      - 当用户在问题中已经明确写出数据库名称（例如 mail_db、iteams_db）时，你必须在 SQL 中使用 database.table 格式
+      - 例如用户说"查询 mail_db 的 requirements_track 表"，你应该执行：execute_query(query="SELECT * FROM mail_db.requirements_track")
+      - 严禁出现：用户问题中写的是 mail_db，但 SQL 中没有使用 database.table 格式导致在默认数据库上执行查询的情况
 
       ## 字段识别规则（仅在用户明确说明字段含义时使用）
 

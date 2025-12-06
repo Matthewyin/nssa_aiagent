@@ -171,11 +171,26 @@ def create_react_graph() -> StateGraph:
     # router -> react_think 或 skip
     def route_to_agent(state: GraphState) -> str:
         """根据target_agent路由到对应节点"""
+        from utils import load_agent_mapping_config
+
         target = state.get("target_agent", "react_think")
         logger.info(f"路由到: {target}")
 
-        # 将 network_agent 和 database_agent 映射到 react_think（使用 ReAct 模式）
-        if target in ["network_agent", "database_agent"]:
+        # 从配置文件获取所有已注册的 Agent
+        mapping_config = load_agent_mapping_config()
+        registered_agents = set()
+        for agent_info in mapping_config.get("agents", {}).values():
+            full_name = agent_info.get("full_name")
+            if full_name:
+                registered_agents.add(full_name)
+
+        # 所有已注册的 Agent 都使用 ReAct 模式
+        if target in registered_agents:
+            return "react_think"
+
+        # 兜底：如果是未知的 agent 名称，也使用 react_think
+        if target.endswith("_agent"):
+            logger.warning(f"未知的 Agent '{target}'，使用 react_think 模式")
             return "react_think"
 
         return target

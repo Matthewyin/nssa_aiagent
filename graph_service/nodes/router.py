@@ -8,7 +8,6 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from loguru import logger
-from langchain_community.llms import Ollama
 from ..state import GraphState
 from utils import load_langgraph_config, load_router_prompt_config, settings, get_config_manager
 
@@ -403,10 +402,13 @@ def _llm_router(user_query: str) -> Optional[List[Dict[str, Any]]]:
 
         logger.info(f"Router: 调用 LLM 进行路由决策...")
         response = llm.invoke(full_prompt)
-        logger.info(f"Router: LLM 响应: {response[:200]}...")
+
+        # 从 AIMessage 对象中提取文本内容
+        response_text = response.content if hasattr(response, 'content') else str(response)
+        logger.info(f"Router: LLM 响应: {response_text[:200]}...")
 
         # 解析 LLM 响应
-        agent_plan = _parse_llm_response(response)
+        agent_plan = _parse_llm_response(response_text)
 
         return agent_plan
 

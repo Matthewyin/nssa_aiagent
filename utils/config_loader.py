@@ -9,6 +9,7 @@ import yaml
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
 from string import Template
+from dotenv import dotenv_values
 
 
 class Settings(BaseSettings):
@@ -61,30 +62,72 @@ class Settings(BaseSettings):
 def load_yaml_config(config_path: str | Path) -> Dict[str, Any]:
     """
     加载YAML配置文件,支持环境变量替换
-    
+
     Args:
         config_path: 配置文件路径
-        
+
     Returns:
         配置字典
     """
     config_path = Path(config_path)
-    
+
     if not config_path.exists():
         raise FileNotFoundError(f"配置文件不存在: {config_path}")
-    
+
     # 读取YAML内容
     with open(config_path, "r", encoding="utf-8") as f:
         content = f.read()
-    
+
+    # 构建环境变量字典，支持 .env 文件中的占位符
+    env_dict = _build_env_dict()
+
     # 替换环境变量 ${VAR_NAME}
     template = Template(content)
-    env_dict = {k: v for k, v in os.environ.items()}
     content = template.safe_substitute(env_dict)
-    
+
     # 解析YAML
     config = yaml.safe_load(content)
     return config
+
+
+def _build_env_dict() -> Dict[str, str]:
+    """
+    构建环境变量字典，支持 .env 文件中的占位符展开
+
+    优先级：
+    1. 系统环境变量（最高优先级）
+    2. .env 文件中的值（如果包含占位符，会用系统环境变量展开）
+
+    Returns:
+        环境变量字典
+    """
+    # 1. 从系统环境变量开始
+    env_dict = dict(os.environ)
+
+    # 2. 读取 .env 文件
+    env_path = Path(__file__).parent.parent / ".env"
+    if env_path.exists():
+        # 使用 dotenv_values 读取 .env 文件内容（不修改 os.environ）
+        dotenv_dict = dotenv_values(env_path)
+
+        # 3. 处理 .env 文件中的占位符
+        for key, value in dotenv_dict.items():
+            # 如果系统环境变量中没有这个键，或者值为空，且 .env 中有值
+            if value is not None and (key not in env_dict or not env_dict.get(key)):
+                if isinstance(value, str) and "${" in value:
+                    # 如果值包含占位符，用系统环境变量展开
+                    template = Template(value)
+                    try:
+                        expanded_value = template.safe_substitute(os.environ)
+                        env_dict[key] = expanded_value
+                    except Exception:
+                        # 如果展开失败，使用原值
+                        env_dict[key] = value
+                else:
+                    # 如果值不包含占位符，直接使用
+                    env_dict[key] = value
+
+    return env_dict
 
 
 def get_config_dir() -> Path:

@@ -84,17 +84,124 @@ class ConfigManager:
             LLM 实例
         """
         if force_reload or instance_name not in self._llm_instances:
-            from langchain_community.llms import Ollama
-            
+            # 延迟导入，避免在未安装某些依赖时影响其他功能
             config = self.load_config("llm_config")
-            llm_config = config["llm"]
-            
-            self._llm_instances[instance_name] = Ollama(
-                model=llm_config["model"],
-                base_url=llm_config["base_url"],
-                temperature=llm_config["temperature"]
+            llm_config = config.get("llm", {}) or {}
+            providers_conf = config.get("providers", {}) or {}
+
+            provider = llm_config.get("provider", "ollama").lower()
+
+            # 1. 先从 llm 节点读通用参数
+            model = llm_config.get("model")
+            base_url = llm_config.get("base_url")
+            temperature = llm_config.get("temperature", 0.7)
+            max_tokens = llm_config.get("max_tokens")
+            timeout = llm_config.get("timeout")
+            api_key = llm_config.get("api_key")
+
+            # 2. 再从 providers.<provider> 读取默认值（如有）
+            provider_conf = providers_conf.get(provider, {}) or {}
+            if model is None:
+                model = provider_conf.get("model")
+            if base_url is None:
+                base_url = provider_conf.get("base_url")
+            if api_key is None:
+                api_key = provider_conf.get("api_key")
+
+            # 3. 根据 provider 构造对应的 LLM 实例
+            llm_instance = None
+
+            if provider == "ollama":
+                from langchain_community.llms import Ollama
+
+                llm_instance = Ollama(
+                    model=model,
+                    base_url=base_url,
+                    temperature=temperature,
+                )
+
+            elif provider == "openai":
+                try:
+                    from langchain_openai import ChatOpenAI
+                except ImportError as e:
+                    raise ImportError(
+                        "使用 provider='openai' 需要安装 'langchain-openai' 依赖，请先通过包管理器安装"
+                    ) from e
+
+                # base_url 可选（例如自定义 OpenAI 兼容网关）
+                llm_kwargs = {
+                    "model": model,
+                    "temperature": temperature,
+                }
+                if max_tokens is not None:
+                    llm_kwargs["max_tokens"] = max_tokens
+                if timeout is not None:
+                    llm_kwargs["timeout"] = timeout
+                if base_url:
+                    llm_kwargs["base_url"] = base_url
+                if api_key:
+                    # 显式传入 api_key，优先使用配置/环境变量解析后的值
+                    llm_kwargs["api_key"] = api_key
+
+                llm_instance = ChatOpenAI(**llm_kwargs)
+
+            elif provider == "gemini":
+                try:
+                    from langchain_google_genai import ChatGoogleGenerativeAI
+                except ImportError as e:
+                    raise ImportError(
+                        "使用 provider='gemini' 需要安装 'langchain-google-genai' 依赖，请先通过包管理器安装"
+                    ) from e
+
+                llm_kwargs = {
+                    "model": model,
+                    "temperature": temperature,
+                }
+                if max_tokens is not None:
+                    llm_kwargs["max_output_tokens"] = max_tokens
+                if timeout is not None:
+                    llm_kwargs["timeout"] = timeout
+
+                if api_key:
+                    # ChatGoogleGenerativeAI 支持通过 api_key 显式传入凭证
+                    llm_kwargs["api_key"] = api_key
+
+                llm_instance = ChatGoogleGenerativeAI(**llm_kwargs)
+
+            elif provider == "deepseek":
+                # DeepSeek 通过 OpenAI 兼容接口访问
+                try:
+                    from langchain_openai import ChatOpenAI
+                except ImportError as e:
+                    raise ImportError(
+                        "使用 provider='deepseek' 需要安装 'langchain-openai' 依赖，请先通过包管理器安装"
+                    ) from e
+
+                llm_kwargs = {
+                    "model": model,
+                    "temperature": temperature,
+                }
+                if max_tokens is not None:
+                    llm_kwargs["max_tokens"] = max_tokens
+                if timeout is not None:
+                    llm_kwargs["timeout"] = timeout
+                if base_url:
+                    llm_kwargs["base_url"] = base_url
+                if api_key:
+                    # DeepSeek 使用独立的 DEEPSEEK_API_KEY 时显式传入
+                    # 若未配置 api_key，则回退由 ChatOpenAI 
+                    # 自行从 OPENAI_API_KEY 等环境变量读取
+                    llm_kwargs["api_key"] = api_key
+
+                llm_instance = ChatOpenAI(**llm_kwargs)
+
+            else:
+                raise ValueError(f"暂不支持的 LLM provider: {provider}")
+
+            self._llm_instances[instance_name] = llm_instance
+            logger.info(
+                f"LLM 实例已创建: {instance_name}, provider: {provider}, model: {getattr(llm_instance, 'model_name', None) or model}"
             )
-            logger.info(f"LLM 实例已创建: {instance_name}, 模型: {llm_config['model']}")
         
         return self._llm_instances[instance_name]
     
