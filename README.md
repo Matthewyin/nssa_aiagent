@@ -1,55 +1,100 @@
-# AI Agent Network Tools
+# NSSA AI Agent Platform
 
-基于 LangGraph + LangChain + MCP 协议的智能网络诊断系统。
+**企业级 AI Agent 智能运维平台** - 基于 LangGraph + MCP 协议的多 Agent 编排系统
 
-## 技术栈
+## 📋 项目简介
 
-### 核心框架
+NSSA AI Agent Platform 是一个面向企业运维场景的智能 Agent 平台，采用"2 个控制平面 + 1 个执行平面"的架构设计，支持多 Agent 协作、工具统一调度、动态负载均衡等企业级特性。
 
-| 技术 | 版本要求 | 说明 |
-|------|----------|------|
-| Python | >= 3.11 | 运行环境 |
-| LangGraph | >= 0.0.30 | 多 Agent 工作流编排 |
-| LangChain | >= 0.1.0 | Agent 抽象与 LLM 集成 |
-| FastAPI | >= 0.109.0 | HTTP API 服务 |
-| MCP (Model Context Protocol) | >= 0.1.0 | 工具标准化接口协议 |
+### 核心特性
 
-### LLM 支持
+- 🤖 **多 Agent 协作**：Router 智能路由 + ReAct 推理循环
+- 🔧 **统一工具网关**：逻辑工具名抽象，Agent 无需感知物理端点
+- 📡 **MCP 协议支持**：标准化的工具调用协议
+- ⚖️ **动态负载均衡**：轮询、权重、一致性哈希等路由策略
+- 📊 **审计日志**：完整的工具调用追踪
+- 🔄 **配置热加载**：运行时动态更新配置
+- 🔌 **多 LLM Provider**：支持 Ollama/OpenAI/Gemini/DeepSeek
 
-- **Ollama** - 本地模型推理 (DeepSeek, Qwen 等)
-- **OpenAI** - GPT 系列模型
-- **DeepSeek** - DeepSeek API
-- **Google Gemini** - Gemini API
+## 🏗️ 系统架构
 
-### 存储与工具
+```mermaid
+flowchart TB
+    subgraph "控制平面 1: 交互 & 编排层"
+        WebUI["WebUI / API"]
+        GraphService["Graph Service<br/>(LangGraph)"]
+        Router["Router<br/>智能路由"]
+        ReAct["ReAct Loop<br/>Think → Act → Observe"]
+    end
 
-| 组件 | 说明 |
-|------|------|
-| ChromaDB | 向量数据库（RAG 检索） |
-| MySQL | 数据库工具（通过 mcp-server-mysql） |
-| netprobe (Go) | 网络诊断工具（ping/traceroute/mtr/nslookup） |
+    subgraph "控制平面 2: 工具 & MCP 控制平面"
+        ToolGateway["Tool Gateway<br/>统一工具入口"]
+        ToolCatalog["Tool Catalog<br/>逻辑名 → 物理端点"]
+        ServerRegistry["Server Registry<br/>注册 / 心跳 / 路由"]
+        AuditLogger["Audit Logger<br/>审计日志"]
+    end
 
-### 开发工具
+    subgraph "执行平面: MCP Servers"
+        NetworkMCP["Network MCP<br/>ping / traceroute"]
+        DatabaseMCP["Database MCP<br/>MySQL 查询"]
+        RAGMCP["RAG MCP<br/>知识库检索"]
+    end
 
-- **uv** - Python 包管理器
-- **loguru** - 日志系统
-- **pydantic** - 数据校验
-- **watchdog** - 配置文件热加载
+    WebUI --> GraphService
+    GraphService --> Router
+    Router --> ReAct
+    ReAct --> ToolGateway
+    ToolGateway --> ToolCatalog
+    ToolGateway --> ServerRegistry
+    ToolGateway --> AuditLogger
+    ServerRegistry --> NetworkMCP
+    ServerRegistry --> DatabaseMCP
+    ServerRegistry --> RAGMCP
+```
 
-## 安装过程
+### 架构说明
 
-### 1. 克隆项目
+| 层级 | 组件 | 职责 |
+|------|------|------|
+| **控制平面 1** | Graph Service | Agent 编排、会话管理、LangGraph 状态机 |
+| | Router | 智能路由，根据用户意图选择 Agent |
+| | ReAct Loop | Think → Act → Observe 推理循环 |
+| **控制平面 2** | Tool Gateway | 统一工具调用入口 `call_tool(logical_name, params)` |
+| | Tool Catalog | 逻辑工具名到物理端点的映射 |
+| | Server Registry | MCP Server 注册、心跳、路由策略 |
+| | Audit Logger | 工具调用审计日志 |
+| **执行平面** | MCP Servers | 实际执行工具的 MCP Server 实例 |
+
+## 🛠️ 技术栈
+
+| 分类 | 技术 | 版本 |
+|------|------|------|
+| **语言** | Python | >= 3.11 |
+| **Agent 框架** | LangGraph + LangChain | 0.0.30+ / 0.1.0+ |
+| **API 框架** | FastAPI + Uvicorn | 0.109+ |
+| **工具协议** | MCP (Model Context Protocol) | 0.1.0+ |
+| **向量数据库** | ChromaDB | 0.4.22+ |
+| **LLM Provider** | Ollama / OpenAI / Gemini / DeepSeek | - |
+| **包管理** | uv | - |
+| **日志** | Loguru | 0.7.2+ |
+
+## 📦 安装方法
+
+### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/Matthewyin/nssa_aiagent.git
-cd nssa_aiagent
+git clone https://github.com/Matthewyin/nssa_AiAgentPlatform.git
+cd nssa_AiAgentPlatform
 ```
 
 ### 2. 安装依赖
 
 ```bash
-# 使用 uv 安装依赖
+# 使用 uv（推荐）
 uv sync
+
+# 或使用 pip
+pip install -e .
 ```
 
 ### 3. 配置环境变量
@@ -58,294 +103,194 @@ uv sync
 # 复制环境变量模板
 cp .env.example .env
 
-# 编辑 .env 文件，配置以下内容：
-# - LLM 配置 (OLLAMA_BASE_URL, DEEPSEEK_API_KEY 等)
-# - MySQL 连接信息 (MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD 等)
-# - 服务端口 (GRAPH_SERVICE_PORT)
+# 编辑 .env 文件，配置必要的环境变量
+# OLLAMA_BASE_URL=http://localhost:11434
+# OPENAI_API_KEY=your-api-key
+# DEEPSEEK_API_KEY=your-api-key
+# GEMINI_API_KEY=your-api-key
 ```
 
-### 4. 编译网络诊断工具
+### 4. 配置 LLM Provider
+
+编辑 `config/llm_config.yaml`：
+
+```yaml
+llm:
+  provider: "ollama"  # 可选: ollama / openai / gemini / deepseek
+  model: "deepseek-r1:8b"
+  temperature: 0.7
+```
+
+### 5. 启动服务
 
 ```bash
-cd netprobe
-go build -o netprobe ./cmd/main.go
-cd ..
+# 启动所有服务
+bash scripts/start_all.sh
+
+# 或手动启动
+uv run python -m graph_service.main
 ```
 
-### 5. 安装 MCP Server
+服务启动后访问：
 
-```bash
-# MySQL MCP Server
-uvx install mcp-server-mysql
-```
+- API 文档：<http://localhost:30021/docs>
+- 健康检查：<http://localhost:30021/health>
 
-### 6. 启动服务
-
-```bash
-bash scripts/restart_all.sh
-```
-
-### 7. 验证服务
-
-- API 文档: `http://localhost:8765/docs`
-- 健康检查: `http://localhost:8765/health`
-
-## 架构设计
-
-### 三层架构
+## 📁 项目结构
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                      表现层 (UI Layer)                       │
-│                    OpenWebUI / Web Client                    │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ HTTP API (OpenAI Compatible)
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     编排层 (Orchestration)                   │
-│                   LangGraph Graph Service                    │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │ user_input → router → react_think → react_act → ...     │ │
-│  │                          ↓                               │ │
-│  │              react_observe → final_answer                │ │
-│  └─────────────────────────────────────────────────────────┘ │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ LangChain Agents
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     执行层 (Execution)                       │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-│  │ NetworkAgent │  │DatabaseAgent │  │  RAG Agent   │       │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘       │
-│         │ MCP Protocol    │ MCP Protocol    │ MCP Protocol  │
-│         ▼                 ▼                 ▼               │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-│  │ network-mcp  │  │ mysql-mcp    │  │  rag-mcp     │       │
-│  │  (netprobe)  │  │              │  │ (chromadb)   │       │
-│  └──────────────┘  └──────────────┘  └──────────────┘       │
-└─────────────────────────────────────────────────────────────┘
+nssa_AiAgentPlatform/
+├── config/                     # 配置文件
+│   ├── llm_config.yaml        # LLM Provider 配置
+│   ├── agent_config.yaml      # Agent 配置
+│   ├── mcp_config.yaml        # MCP Server 配置
+│   ├── tool_catalog.yaml      # 工具目录配置
+│   └── server_registry.yaml   # 服务注册配置
+├── graph_service/              # Graph Service 主服务
+│   ├── main.py                # FastAPI 入口
+│   ├── graph.py               # LangGraph 图定义
+│   ├── state.py               # 状态定义
+│   └── nodes/                 # 图节点
+│       ├── router.py          # 路由节点
+│       ├── react_think.py     # ReAct Think 节点
+│       ├── react_act.py       # ReAct Act 节点
+│       └── react_observe.py   # ReAct Observe 节点
+├── tool_gateway/               # 工具网关
+│   ├── gateway.py             # 统一调用入口
+│   ├── catalog.py             # 工具目录
+│   ├── registry.py            # 服务注册表
+│   ├── router.py              # 路由策略
+│   ├── audit.py               # 审计日志
+│   └── api.py                 # HTTP API
+├── mcp_servers/                # MCP Server 实现
+│   ├── network_mcp/           # 网络诊断 MCP
+│   └── rag_mcp/               # RAG 检索 MCP
+├── mcp_manager/                # MCP 客户端管理
+│   ├── client_manager.py      # 客户端管理器
+│   └── connection.py          # 连接管理
+├── agents/                     # Agent 实现
+│   ├── base_agent.py          # Agent 基类
+│   └── network_diag_agent.py  # 网络诊断 Agent
+├── utils/                      # 工具类
+│   ├── config_manager.py      # 配置管理器
+│   └── config_watcher.py      # 配置热加载
+└── scripts/                    # 脚本
+    ├── start_all.sh           # 启动脚本
+    └── stop_all.sh            # 停止脚本
 ```
 
-### 目录结构
-
-```text
-.
-├── graph_service/          # LangGraph 工作流服务
-│   ├── main.py             # FastAPI 入口
-│   ├── graph.py            # 工作流定义
-│   ├── state.py            # 状态定义 (GraphState)
-│   ├── openai_api.py       # OpenAI 兼容 API
-│   └── nodes/              # 工作流节点
-│       ├── router.py       # 路由节点
-│       ├── react_think.py  # ReAct 思考节点
-│       ├── react_act.py    # ReAct 执行节点
-│       ├── react_observe.py # ReAct 观察节点
-│       └── final_answer.py # 最终回答节点
-├── agents/                 # Agent 实现
-│   ├── base_agent.py       # 基础 Agent 类
-│   ├── network_diag_agent.py # 网络诊断 Agent
-│   └── database_agent.py   # 数据库 Agent
-├── mcp_manager/            # MCP 客户端管理
-│   ├── client_manager.py   # MCP 连接管理器
-│   ├── stdio_connection.py # Stdio 连接实现
-│   └── adapters/           # LangChain 适配器
-├── mcp_servers/            # MCP Server 实现
-│   ├── network_mcp/        # 网络诊断 MCP Server
-│   └── rag_mcp/            # RAG MCP Server
-├── netprobe/               # Go 网络诊断工具
-│   └── cmd/                # ping/traceroute/mtr/nslookup
-├── config/                 # 配置文件
-│   ├── llm_config.yaml     # LLM 配置
-│   ├── agent_config.yaml   # Agent 配置
-│   ├── mcp_config.yaml     # MCP Server 配置
-│   └── workflow_templates.yaml # 工作流模板
-├── utils/                  # 工具模块
-│   ├── config_loader.py    # 配置加载
-│   ├── config_manager.py   # 配置管理器
-│   └── logger.py           # 日志系统
-└── scripts/                # 启动脚本
-    └── restart_all.sh      # 重启服务
-```
-
-## 组件调用关系
-
-### 整体流程
-
-```mermaid
-graph TB
-    subgraph UI["表现层"]
-        A[OpenWebUI / Client]
-    end
-
-    subgraph Orchestration["编排层 - LangGraph"]
-        B[user_input_node]
-        C[router_node]
-        D[react_think_node]
-        E[react_act_node]
-        F[react_observe_node]
-        G[switch_agent_node]
-        H[final_answer_node]
-    end
-
-    subgraph Agents["Agent 层"]
-        I[NetworkAgent]
-        J[DatabaseAgent]
-        K[RAG Agent]
-    end
-
-    subgraph MCP["MCP 工具层"]
-        L[network-mcp<br/>ping/traceroute/mtr]
-        M[mysql-mcp<br/>execute_query/list_tables]
-        N[rag-mcp<br/>search/retrieve]
-    end
-
-    subgraph LLM["LLM 推理"]
-        O[Ollama / DeepSeek / OpenAI]
-    end
-
-    A -->|HTTP POST /v1/chat/completions| B
-    B --> C
-    C -->|路由决策| D
-    D -->|思考| E
-    E -->|执行工具| F
-    F -->|观察结果| D
-    F -->|任务完成| G
-    G -->|切换 Agent| D
-    F -->|所有 Agent 完成| H
-    H -->|返回结果| A
-
-    D <-->|LLM 调用| O
-    E --> I & J & K
-    I --> L
-    J --> M
-    K --> N
-```
-
-### ReAct 循环详细流程
+## 🔄 调用流程
 
 ```mermaid
 sequenceDiagram
     participant User as 用户
-    participant API as FastAPI
-    participant Router as router_node
-    participant Think as react_think_node
-    participant Act as react_act_node
-    participant Observe as react_observe_node
+    participant API as Graph Service API
+    participant Router as Router 节点
+    participant ReAct as ReAct Loop
+    participant Gateway as Tool Gateway
+    participant Registry as Server Registry
     participant MCP as MCP Server
-    participant LLM as LLM
 
-    User->>API: POST /v1/chat/completions
-    API->>Router: 路由决策
-    Router->>LLM: 分析用户意图
-    LLM-->>Router: 返回 Agent 计划
+    User->>API: POST /chat {message}
+    API->>Router: 路由分析
+    Router->>ReAct: 选择 Agent
 
     loop ReAct 循环
-        Router->>Think: 开始思考
-        Think->>LLM: 构建 Prompt (任务+工具+历史)
-        LLM-->>Think: THOUGHT + ACTION + PARAMS
-        Think->>Act: 执行动作
-
-        alt ACTION = TOOL
-            Act->>MCP: 调用工具
-            MCP-->>Act: 返回结果
-            Act->>Observe: 记录观察
-            Observe-->>Think: 继续循环
-        else ACTION = FINISH
-            Act->>Observe: 任务完成
-            Observe-->>API: 返回 final_answer
-        end
+        ReAct->>ReAct: Think (LLM 推理)
+        ReAct->>Gateway: call_tool(logical_name, params)
+        Gateway->>Registry: 获取可用 Server
+        Registry-->>Gateway: Server 列表
+        Gateway->>MCP: 执行工具
+        MCP-->>Gateway: 执行结果
+        Gateway-->>ReAct: 返回结果
+        ReAct->>ReAct: Observe (分析结果)
     end
 
-    API-->>User: 返回结果
+    ReAct-->>API: 最终回答
+    API-->>User: 响应
 ```
 
-### 多 Agent 串行执行
+## 📡 API 接口
 
-```mermaid
-graph LR
-    subgraph Plan["Agent 执行计划"]
-        P1[database_agent<br/>查询 IP]
-        P2[network_agent<br/>Ping 测试]
-    end
-
-    subgraph Execution["执行过程"]
-        E1[执行 database_agent]
-        E2[提取输出结果]
-        E3[传递给 network_agent]
-        E4[执行 network_agent]
-        E5[汇总最终结果]
-    end
-
-    P1 --> E1
-    E1 --> E2
-    E2 -->|IP 列表| E3
-    P2 --> E3
-    E3 --> E4
-    E4 --> E5
-```
-
-### MCP 工具调用
-
-```mermaid
-graph LR
-    subgraph Agent["Agent"]
-        A1[NetworkAgent]
-    end
-
-    subgraph Manager["MCP Manager"]
-        M1[McpClientManager]
-        M2[LangChainAdapter]
-    end
-
-    subgraph Connection["MCP Connection"]
-        C1[McpStdioConnection]
-    end
-
-    subgraph Server["MCP Server"]
-        S1[network-mcp]
-        S2[netprobe<br/>Go 二进制]
-    end
-
-    A1 -->|build_langchain_tools| M2
-    M2 -->|call_tool| M1
-    M1 -->|JSON-RPC| C1
-    C1 -->|stdio| S1
-    S1 -->|exec| S2
-```
-
-## 配置说明
-
-### 配置文件结构
-
-| 文件 | 说明 |
-|------|------|
-| `.env` | 环境变量（API Key、数据库连接等） |
-| `config/llm_config.yaml` | LLM 配置（模型、温度、超时） |
-| `config/agent_config.yaml` | Agent 配置（system_prompt、工具前缀） |
-| `config/mcp_config.yaml` | MCP Server 配置（命令、参数） |
-| `config/workflow_templates.yaml` | 工作流模板（关键词触发、多 Agent 编排） |
-
-### 配置热加载
-
-系统支持配置文件热加载，修改 YAML 配置文件后无需重启服务即可生效。
-
-## 常用命令
+### 对话接口
 
 ```bash
-# 启动服务
-bash scripts/restart_all.sh
+# 普通对话
+curl -X POST http://localhost:30021/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "ping 8.8.8.8"}'
 
-# 查看日志
-tail -f data/logs/app.log
-
-# 运行测试
-uv run pytest tests/
-
-# 格式化代码
-uv run black .
-uv run ruff check --fix .
+# 流式对话
+curl -X POST http://localhost:30021/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"message": "检查网络连通性"}'
 ```
 
-## License
+### 服务注册接口
 
-MIT
+```bash
+# 注册 MCP Server
+curl -X POST http://localhost:30021/registry/register \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my-mcp", "tools": ["tool1", "tool2"]}'
+
+# 心跳
+curl -X POST http://localhost:30021/registry/heartbeat \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my-mcp"}'
+
+# 查询 Server 列表
+curl http://localhost:30021/registry/servers
+```
+
+## ⚙️ 配置说明
+
+### LLM 配置 (`config/llm_config.yaml`)
+
+```yaml
+llm:
+  provider: "deepseek"  # ollama / openai / gemini / deepseek
+  model: "deepseek-reasoner"
+  temperature: 0.7
+  max_tokens: 8000
+
+providers:
+  openai:
+    api_key: "${OPENAI_API_KEY}"
+  deepseek:
+    api_key: "${DEEPSEEK_API_KEY}"
+    base_url: "${DEEPSEEK_BASE_URL}"
+```
+
+### 路由策略 (`config/server_registry.yaml`)
+
+```yaml
+routing:
+  default_strategy: "round_robin"  # round_robin / weighted / consistent_hash / random
+
+load_balancing:
+  enabled: true
+  strategies:
+    round_robin: {}
+    weighted:
+      default_weight: 100
+    consistent_hash:
+      virtual_nodes: 150
+```
+
+## 🧪 测试
+
+```bash
+# 运行所有测试
+uv run pytest
+
+# 运行指定测试
+uv run pytest tests/test_api.py -v
+
+# 测试覆盖率
+uv run pytest --cov=graph_service
+```
+
+## 📄 许可证
+
+MIT License

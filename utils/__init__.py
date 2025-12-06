@@ -13,7 +13,17 @@ from .config_loader import (
     load_agent_mapping_config,
 )
 from .config_manager import get_config_manager, ConfigManager
-from .config_watcher import start_config_watcher, stop_config_watcher
+
+# watchdog 是可选依赖，仅在需要配置热加载时使用
+try:
+    from .config_watcher import start_config_watcher, stop_config_watcher
+except ImportError:
+    # watchdog 未安装时，提供空实现
+    def start_config_watcher(config_manager):
+        return None
+
+    def stop_config_watcher(watcher):
+        pass
 
 __all__ = [
     "setup_logger",

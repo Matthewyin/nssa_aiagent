@@ -1,0 +1,174 @@
+# ToolCatalog 配置
+# 定义逻辑工具名 → 物理端点的映射关系
+# 这是 ToolGateway 的核心配置
+
+# 版本信息
+version: "1.0"
+
+# 工具目录
+tools:
+  # ============== 网络诊断工具 ==============
+  # Ping 测试
+  ping:
+    logical_name: "ping"
+    description: "网络连通性测试，检测目标主机是否可达"
+    category: "network"
+    tags: ["network", "diagnostic", "connectivity"]
+    # 物理端点绑定（可以有多个，用于负载均衡或多环境）
+    bindings:
+      - mcp_server: "network-mcp"
+        physical_tool: "network.ping"
+        environment: "default"
+        priority: 1
+        enabled: true
+    # 参数 schema
+    input_schema:
+      type: object
+      properties:
+        target:
+          type: string
+          description: "目标主机地址（IP 或域名）"
+        count:
+          type: integer
+          description: "ping 次数"
+          default: 4
+      required: ["target"]
+    # 权限控制
+    permissions:
+      allowed_agents: ["network_agent"]
+      require_confirmation: false
+  
+  # Traceroute 路由追踪
+  traceroute:
+    logical_name: "traceroute"
+    description: "追踪数据包到目标主机的路由路径"
+    category: "network"
+    tags: ["network", "diagnostic", "routing"]
+    bindings:
+      - mcp_server: "network-mcp"
+        physical_tool: "network.traceroute"
+        environment: "default"
+        priority: 1
+        enabled: true
+    input_schema:
+      type: object
+      properties:
+        target:
+          type: string
+          description: "目标主机地址"
+      required: ["target"]
+    permissions:
+      allowed_agents: ["network_agent"]
+      require_confirmation: false
+
+  # DNS 查询
+  nslookup:
+    logical_name: "nslookup"
+    description: "DNS 域名解析查询"
+    category: "network"
+    tags: ["network", "dns", "diagnostic"]
+    bindings:
+      - mcp_server: "network-mcp"
+        physical_tool: "network.nslookup"
+        environment: "default"
+        priority: 1
+        enabled: true
+    input_schema:
+      type: object
+      properties:
+        domain:
+          type: string
+          description: "要查询的域名"
+      required: ["domain"]
+    permissions:
+      allowed_agents: ["network_agent"]
+      require_confirmation: false
+
+  # MTR 网络诊断
+  mtr:
+    logical_name: "mtr"
+    description: "综合 ping 和 traceroute 的网络诊断工具"
+    category: "network"
+    tags: ["network", "diagnostic", "advanced"]
+    bindings:
+      - mcp_server: "network-mcp"
+        physical_tool: "network.mtr"
+        environment: "default"
+        priority: 1
+        enabled: true
+    input_schema:
+      type: object
+      properties:
+        target:
+          type: string
+          description: "目标主机地址"
+      required: ["target"]
+    permissions:
+      allowed_agents: ["network_agent"]
+      require_confirmation: false
+
+  # ============== 数据库工具 ==============
+  # SQL 查询
+  sql_query:
+    logical_name: "sql_query"
+    description: "执行 SQL 查询语句"
+    category: "database"
+    tags: ["database", "mysql", "query"]
+    bindings:
+      - mcp_server: "mysql-mcp"
+        physical_tool: "mysql.execute_query"
+        environment: "default"
+        priority: 1
+        enabled: true
+    input_schema:
+      type: object
+      properties:
+        query:
+          type: string
+          description: "SQL 查询语句"
+      required: ["query"]
+    permissions:
+      allowed_agents: ["database_agent"]
+      require_confirmation: false
+      # 危险操作检测
+      dangerous_patterns: ["DELETE", "DROP", "TRUNCATE", "UPDATE"]
+
+  # 列出数据库表
+  list_tables:
+    logical_name: "list_tables"
+    description: "列出数据库中的所有表"
+    category: "database"
+    tags: ["database", "mysql", "schema"]
+    bindings:
+      - mcp_server: "mysql-mcp"
+        physical_tool: "mysql.list_tables"
+        environment: "default"
+        priority: 1
+        enabled: true
+    permissions:
+      allowed_agents: ["database_agent"]
+      require_confirmation: false
+
+  # 查看表结构
+  describe_table:
+    logical_name: "describe_table"
+    description: "查看数据库表的结构"
+    category: "database"
+    tags: ["database", "mysql", "schema"]
+    bindings:
+      - mcp_server: "mysql-mcp"
+        physical_tool: "mysql.describe_table"
+        environment: "default"
+        priority: 1
+        enabled: true
+    input_schema:
+      type: object
+      properties:
+        table:
+          type: string
+          description: "表名"
+      required: ["table"]
+    permissions:
+      allowed_agents: ["database_agent"]
+      require_confirmation: false
+

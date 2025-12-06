@@ -1,0 +1,109 @@
+# Server Registry 配置
+# MCP Server 注册中心配置
+
+# 版本信息
+version: "1.0"
+
+# 注册中心设置
+registry:
+  # 是否启用动态注册
+  enabled: true
+  
+  # 注册表持久化（可选，用于服务重启后恢复）
+  persistence:
+    enabled: false
+    file: "data/registry/servers.json"
+
+# 心跳配置
+heartbeat:
+  # 心跳间隔（秒）
+  interval_seconds: 30
+  # 心跳超时（秒），超过此时间未收到心跳则标记为不健康
+  timeout_seconds: 90
+  # 不健康后多久标记为下线（秒）
+  offline_threshold_seconds: 180
+  # 探活检查间隔（秒）
+  probe_interval_seconds: 10
+
+# 路由策略配置
+routing:
+  # 默认路由策略: round_robin | weighted | consistent_hash | random
+  default_strategy: "round_robin"
+  
+  # 策略配置
+  strategies:
+    round_robin:
+      description: "轮询策略，按顺序依次选择"
+    
+    weighted:
+      description: "权重策略，按权重比例选择"
+      # 默认权重（Server 未指定时使用）
+      default_weight: 100
+    
+    consistent_hash:
+      description: "一致性哈希策略，相同参数总是路由到同一实例"
+      # 虚拟节点数量
+      virtual_nodes: 150
+      # 哈希字段（从调用参数中提取用于哈希的字段）
+      hash_fields: ["target", "query", "domain"]
+    
+    random:
+      description: "随机策略"
+
+# 健康检查配置
+health_check:
+  # 是否启用主动健康检查
+  enabled: true
+  # 检查类型: ping | http | tcp
+  check_type: "ping"
+  # 检查间隔（秒）
+  interval_seconds: 30
+  # 检查超时（秒）
+  timeout_seconds: 5
+  # 连续失败多少次标记为不健康
+  unhealthy_threshold: 3
+  # 连续成功多少次恢复为健康
+  healthy_threshold: 2
+
+# 负载均衡配置
+load_balancing:
+  # 是否启用负载均衡
+  enabled: true
+  # 最大重试次数（当选中的实例不可用时）
+  max_retries: 3
+  # 重试间隔（毫秒）
+  retry_interval_ms: 100
+  # 故障转移：当主实例不可用时是否自动切换
+  failover_enabled: true
+
+# 环境配置
+environments:
+  - name: "default"
+    description: "默认环境"
+    priority: 1
+  - name: "dev"
+    description: "开发环境"
+    priority: 2
+  - name: "test"
+    description: "测试环境"
+    priority: 3
+  - name: "prod"
+    description: "生产环境"
+    priority: 4
+
+# 预注册的 Server（静态配置，服务启动时自动注册）
+# 这些 Server 不需要通过 HTTP 接口注册，会自动加载
+static_servers:
+  - name: "network-mcp"
+    description: "网络诊断 MCP Server"
+    environment: "default"
+    weight: 100
+    # 从 mcp_config.yaml 中加载详细配置
+    config_ref: "network-mcp"
+    
+  - name: "mysql-mcp"
+    description: "MySQL 数据库 MCP Server"
+    environment: "default"
+    weight: 100
+    config_ref: "mysql-mcp"
+

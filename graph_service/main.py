@@ -14,6 +14,7 @@ from loguru import logger
 from .graph import compile_graph
 from .state import GraphState
 from .openai_api import router as openai_router
+from tool_gateway.api import router as registry_router
 from utils import settings, setup_logger, get_config_manager, start_config_watcher, stop_config_watcher
 
 # 加载 .env 文件到环境变量
@@ -44,6 +45,9 @@ app.add_middleware(
 
 # 注册OpenAI兼容的API路由
 app.include_router(openai_router, tags=["OpenAI Compatible API"])
+
+# 注册 Server Registry API 路由
+app.include_router(registry_router, tags=["Server Registry"])
 
 # 编译LangGraph图
 graph = compile_graph()

@@ -2,26 +2,25 @@
 ReAct Act Node
 行动节点：执行 LLM 决定的工具调用
 """
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from loguru import logger
 from ..state import GraphState
-from mcp_manager import McpClientManager
 import json
 import re
 
 
-# 全局 MCP Manager 实例
-_mcp_manager = None
+# 全局 ToolGateway 实例
+_tool_gateway = None
 
 
-async def get_mcp_manager():
-    """获取或创建 MCP Manager 实例"""
-    global _mcp_manager
-    if _mcp_manager is None:
-        _mcp_manager = McpClientManager()
-        await _mcp_manager.start_all_servers()
-        logger.info("MCP Manager 初始化完成（ReAct Act）")
-    return _mcp_manager
+async def get_tool_gateway():
+    """获取或创建 ToolGateway 实例"""
+    global _tool_gateway
+    if _tool_gateway is None:
+        from tool_gateway import ToolGateway
+        _tool_gateway = ToolGateway()
+        logger.info("ToolGateway 初始化完成（ReAct Act）")
+    return _tool_gateway
 
 
 async def react_act_node(state: GraphState) -> GraphState:
@@ -96,34 +95,58 @@ async def react_act_node(state: GraphState) -> GraphState:
                         f"自动补全 mysql database 参数时出现异常: {str(e)}"
                     )
 
-            logger.info(f"执行工具: {tool_name}, 参数: {params}")
+            # 获取调用者 Agent 和会话信息
+            caller_agent = state.get("target_agent", "unknown_agent")
+            session_id = state.get("metadata", {}).get("session_id")
 
-            # 获取 MCP Manager
-            mcp_manager = await get_mcp_manager()
+            logger.info(f"执行工具: {tool_name}, 参数: {params}, 调用者: {caller_agent}")
 
-            # 调用工具
+            # 获取 ToolGateway
+            tool_gateway = await get_tool_gateway()
+
+            # 通过 ToolGateway 调用工具
             try:
-                result = await mcp_manager.call_tool(tool_name, params)
-
-                # 解析结果
-                if isinstance(result, str):
-                    try:
-                        result_dict = json.loads(result)
-                        result_str = json.dumps(
-                            result_dict, ensure_ascii=False, indent=2
-                        )
-                    except json.JSONDecodeError:
-                        result_str = result
-                else:
-                    result_str = json.dumps(result, ensure_ascii=False, indent=2)
-
-                logger.info(f"工具执行成功: {tool_name}")
-                logger.debug(f"工具结果:\n{result_str[:500]}...")
-
-                # 保存观察结果
-                state["last_observation"] = (
-                    f"工具 {tool_name} 执行成功。结果:\n{result_str}"
+                # 使用物理工具名调用（向后兼容，ToolGateway 会自动处理映射）
+                call_result = await tool_gateway.call_tool_by_physical_name(
+                    physical_name=tool_name,
+                    params=params,
+                    caller_agent=caller_agent,
+                    session_id=session_id,
                 )
+
+                # 检查调用状态
+                from tool_gateway.models import ToolCallStatus
+                if call_result.status == ToolCallStatus.SUCCESS:
+                    # 解析结果
+                    result = call_result.result
+                    if isinstance(result, str):
+                        try:
+                            result_dict = json.loads(result)
+                            result_str = json.dumps(
+                                result_dict, ensure_ascii=False, indent=2
+                            )
+                        except json.JSONDecodeError:
+                            result_str = result
+                    else:
+                        result_str = json.dumps(result, ensure_ascii=False, indent=2)
+
+                    logger.info(f"工具执行成功: {tool_name}")
+                    logger.debug(f"工具结果:\n{result_str[:500]}...")
+
+                    # 保存观察结果
+                    state["last_observation"] = (
+                        f"工具 {tool_name} 执行成功。结果:\n{result_str}"
+                    )
+                elif call_result.status == ToolCallStatus.PERMISSION_DENIED:
+                    error_msg = f"权限不足: {call_result.error}"
+                    logger.error(error_msg)
+                    state["errors"].append(error_msg)
+                    state["last_observation"] = f"错误: {error_msg}"
+                else:
+                    error_msg = f"工具调用失败: {tool_name}, 错误: {call_result.error}"
+                    logger.error(error_msg)
+                    state["errors"].append(error_msg)
+                    state["last_observation"] = f"错误: {error_msg}"
 
             except Exception as e:
                 error_msg = f"工具调用失败: {tool_name}, 错误: {str(e)}"
