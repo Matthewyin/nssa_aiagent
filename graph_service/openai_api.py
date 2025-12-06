@@ -330,9 +330,8 @@ def _format_node_output(node_name: str, state_update: Dict[str, Any]) -> str:
                 params = next_action.get("params", {})
 
                 if thought:
-                    # 使用 Markdown 格式，默认展开
-                    output = "\n<details open>\n"
-                    output += "<summary>🤔 思考中...</summary>\n\n"
+                    # 使用纯 Markdown 格式，默认展开
+                    output = "\n#### 🤔 思考中...\n\n"
                     output += f"```\n{thought}\n```\n\n"
 
                     # 如果有行动决策，也显示出来
@@ -343,8 +342,6 @@ def _format_node_output(node_name: str, state_update: Dict[str, Any]) -> str:
                         output += "\n"
                     elif action_type == "FINISH":
                         output += "✅ **准备完成任务**\n\n"
-
-                    output += "</details>\n\n"
 
                     return output
             return ""
@@ -365,20 +362,18 @@ def _format_node_output(node_name: str, state_update: Dict[str, Any]) -> str:
                     # 尝试提取结构化摘要
                     summary = extract_result_summary(tool_name, observation) if tool_name else None
 
-                    # 使用 Markdown 格式，默认展开
-                    output = "\n<details open>\n"
-                    output += "<summary>📊 观察结果</summary>\n\n"
+                    # 使用纯 Markdown 格式，默认展开
+                    output = "\n#### 📊 观察结果\n\n"
 
                     # 如果有摘要，先显示摘要
                     if summary:
-                        output += f"**摘要**: {summary}\n\n"
+                        output += f"> 📌 **摘要**: {summary}\n\n"
 
                     # 智能截断观察结果
                     observation_display = smart_truncate(observation, tool_type)
 
                     # 使用代码块包裹，保持格式
                     output += f"```\n{observation_display}\n```\n\n"
-                    output += "</details>\n\n"
 
                     return output
             return ""

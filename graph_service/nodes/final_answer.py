@@ -152,23 +152,16 @@ def _format_tool_result_three_sections(tool_name: str, params: Dict[str, Any], r
 
 """
 
-    # 第一部分：原始输出
+    # 第一部分：原始输出（使用纯 Markdown 格式，美观展示）
     raw_output = result.get("raw_output", "")
     if raw_output:
-        output += f"""<details open>
-<summary>📝 原始输出</summary>
+        output += "### 📝 原始输出\n\n"
+        output += "```text\n"
+        output += raw_output.strip()
+        output += "\n```\n\n"
 
-```
-{raw_output.strip()}
-```
-
-</details>
-
-"""
-
-    # 第二部分：结构化结果
-    output += "<details open>\n"
-    output += "<summary>📈 结构化结果</summary>\n\n"
+    # 第二部分：结构化结果（使用纯 Markdown 格式）
+    output += "### 📈 结构化结果\n\n"
 
     # 根据不同工具类型，提取关键信息
     if tool_name == "network.ping":
@@ -263,7 +256,7 @@ def _format_tool_result_three_sections(tool_name: str, params: Dict[str, Any], r
     if error:
         output += f"\n❌ 错误信息: {error}\n"
 
-    output += "\n</details>\n\n"
+    output += "\n"
 
     return output
 
@@ -354,71 +347,56 @@ def final_answer_node(state: GraphState) -> GraphState:
                 # 添加分隔线
                 final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
 
-                # 添加执行过程详情（完整展示，默认打开）
-                final_answer += "<details open>\n"
-                final_answer += f"<summary>📋 执行过程详情（共 {len(execution_history)} 步）</summary>\n\n"
+                # 添加执行过程详情（使用纯 Markdown 格式，默认展开）
+                final_answer += f"### 📋 执行过程详情（共 {len(execution_history)} 步）\n\n"
                 for i, record in enumerate(execution_history, 1):
                     thought = record.get("thought", "")
                     action = record.get("action", {})
                     action_type = action.get("type", "")
                     observation = record.get("observation", "")
 
-                    # 使用框线格式展示每一步
-                    final_answer += f"┌─ 步骤 {i} " + "─" * 40 + "\n"
+                    # 使用 Markdown 格式展示每一步
+                    final_answer += f"#### 步骤 {i}\n\n"
 
-                    # 展示思考过程（完整内容）
+                    # 展示思考过程
                     if thought:
-                        final_answer += "│ 🤔 思考:\n"
-                        # 将思考内容按行分割，每行前面加上 "│ "
-                        for line in thought.split('\n'):
-                            final_answer += f"│ {line}\n"
-                        final_answer += "│\n"
+                        final_answer += "**🤔 思考:**\n\n"
+                        final_answer += f"```\n{thought}\n```\n\n"
 
-                    # 展示行动（完整参数）
+                    # 展示行动
                     if action_type == "TOOL":
                         tool_name = action.get("tool", "")
                         params = action.get("params", {})
-                        final_answer += "│ 🔧 行动:\n"
-                        final_answer += f"│ 工具: {tool_name}\n"
+                        final_answer += "**🔧 行动:**\n\n"
+                        final_answer += f"- 工具: `{tool_name}`\n"
                         if params:
-                            final_answer += "│ 参数: "
-                            # 格式化 JSON 参数
                             params_json = json.dumps(params, ensure_ascii=False, indent=2)
-                            # 将 JSON 的每一行前面加上 "│ "
-                            params_lines = params_json.split('\n')
-                            final_answer += params_lines[0] + "\n"
-                            for line in params_lines[1:]:
-                                final_answer += f"│ {line}\n"
-                        final_answer += "│\n"
+                            final_answer += f"- 参数:\n```json\n{params_json}\n```\n\n"
+                        else:
+                            final_answer += "\n"
                     elif action_type == "FINISH":
-                        final_answer += "│ ✅ 行动: 完成任务\n"
-                        final_answer += "│\n"
+                        final_answer += "**✅ 行动:** 完成任务\n\n"
 
-                    # 展示观察结果（使用智能截断，保留开头和结尾）
+                    # 展示观察结果
                     if observation:
-                        final_answer += "│ 📊 观察:\n"
-
                         # 获取工具名称和类型，使用智能截断
                         obs_tool_name = action.get("tool", "") if isinstance(action, dict) else ""
                         obs_tool_type = get_tool_type(obs_tool_name) if obs_tool_name else "default"
 
                         # 尝试提取结构化摘要
                         summary = extract_result_summary(obs_tool_name, observation) if obs_tool_name else None
+
+                        final_answer += "**📊 观察:**\n\n"
                         if summary:
-                            final_answer += f"│ 📌 摘要: {summary}\n"
+                            final_answer += f"> 📌 **摘要**: {summary}\n\n"
 
                         # 使用智能截断
                         observation_display = smart_truncate(observation, obs_tool_type)
+                        final_answer += f"```\n{observation_display}\n```\n\n"
 
-                        # 将观察结果按行分割，每行前面加上 "│ "
-                        for line in observation_display.split('\n'):
-                            final_answer += f"│ {line}\n"
+                    final_answer += "---\n\n"
 
-                    final_answer += "└" + "─" * 50 + "\n\n"
-
-                final_answer += "\n</details>\n\n"
-
-                # 添加 LLM 综合分析（第三段）
+                # 添加 LLM 综合分析（使用纯 Markdown 格式）
                 try:
                     user_query = state.get("user_query", "")
                     agent_plan = state.get("agent_plan", [])
@@ -426,10 +404,9 @@ def final_answer_node(state: GraphState) -> GraphState:
                     llm_analysis = _generate_llm_analysis(user_query, execution_history, agent_plan)
 
                     if llm_analysis:
-                        final_answer += "<details open>\n"
-                        final_answer += "<summary>💡 综合分析</summary>\n\n"
+                        final_answer += "### 💡 综合分析\n\n"
                         final_answer += llm_analysis
-                        final_answer += "\n</details>\n\n"
+                        final_answer += "\n\n"
                 except Exception as e:
                     logger.error(f"生成 LLM 分析时出错: {e}")
 
@@ -489,13 +466,12 @@ def final_answer_node(state: GraphState) -> GraphState:
                 # 添加分隔线
                 final_answer += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
 
-                # 添加 LLM 的综合分析（第三部分）
+                # 添加 LLM 的综合分析（第三部分，使用纯 Markdown）
                 llm_analysis = diag_result.get("output", "")
                 if llm_analysis:
-                    final_answer += "<details open>\n"
-                    final_answer += "<summary>💡 综合分析</summary>\n\n"
+                    final_answer += "### 💡 综合分析\n\n"
                     final_answer += llm_analysis
-                    final_answer += "\n</details>\n\n"
+                    final_answer += "\n\n"
             else:
                 # 没有工具结果，只显示 LLM 的输出
                 if "output" in diag_result:
